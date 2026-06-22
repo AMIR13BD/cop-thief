@@ -1,0 +1,59 @@
+# ============================================================================
+# Cop-vs-Thief — single source of truth for all game parameters.
+# No value used by the engine is hard-coded; everything lives here (assignment §10).
+# Values map 1:1 to SHARED_MATCH_RULES.md so two engines stay compatible.
+# ============================================================================
+
+game:
+  grid_size: [5, 5]        # [rows, cols]; origin [0,0] top-left, addressing [row, col]
+  max_moves: 25            # max THIEF moves per sub-game (thief wins on surviving the 25th)
+  num_games: 6             # sub-games in a full series
+  max_barriers: 5          # barriers the cop may place per sub-game
+  movement_directions: 8   # 8 = include diagonals (king moves); 4 = orthogonal only
+
+scoring:
+  cop_win: 20              # cop score on a successful capture
+  thief_win: 10            # thief score on a successful escape
+  cop_loss: 5              # cop score when the thief escapes
+  thief_loss: 5            # thief score when the thief is captured
+
+observation:
+  vision_radius: 2         # Chebyshev (king-move) radius; opponent/barriers seen within it
+  start_outside_vision: true   # place start cells beyond each other's vision radius
+
+referee:
+  # Single authoritative state owner. For internal games this engine is always referee.
+  # In the bonus match the cop's team engine is referee (SHARED_MATCH_RULES.md §2.1).
+  owner: cop
+
+turn:
+  timeout_seconds: 30      # per-turn budget (SHARED_MATCH_RULES.md §2.5)
+  reprompt_on_timeout: true  # one re-prompt, then concede the sub-game
+
+match:
+  seed: 42                 # shared RNG seed for reproducible start positions (set per match)
+  rate_limit_per_min: 30   # cap outbound calls per direction (SHARED_MATCH_RULES.md §3)
+  max_retries: 3           # transient-error retries before declaring a Technical Loss
+
+llm:
+  provider: heuristic      # "anthropic" = cloud API; "heuristic" = offline deterministic
+  model: claude-opus-4-8   # cheaper option for this short-token workload: claude-haiku-4-5
+  temperature: 0.7         # only sent to models that accept sampling (Haiku/Sonnet, not Opus 4.7+)
+  max_tokens: 400
+
+# Team identity & endpoints — fill per match (kept out of code; URLs/tokens via .env).
+team:
+  group_name: "Team-Alpha"
+  students: []             # ["Full Name <id>", ...]
+  github_repo: "https://github.com/AMIR13BD/cop-thief"
+  cop_mcp_url: "https://REPLACE_ME-cop.example.run"
+  thief_mcp_url: "https://REPLACE_ME-thief.example.run"
+  timezone: "Asia/Jerusalem"
+
+report:
+  recipient: "rmisegal+uoh26b@gmail.com"
+  output_dir: "results/reports"
+
+logging:
+  level: "INFO"
+  dir: "results/logs"
