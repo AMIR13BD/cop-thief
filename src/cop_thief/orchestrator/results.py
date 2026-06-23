@@ -64,6 +64,10 @@ class TurnLogWriter:
         """Log a sub-game's final outcome."""
         self._emit({"event": "subgame_end", **asdict(summary)})
 
+    def void(self, sub_game: int, reason: str) -> None:
+        """Log a sub-game voided as a Technical Loss (§9) before it is re-run."""
+        self._emit({"event": "technical_loss", "sub_game": sub_game, "reason": reason})
+
     def series_end(self, totals: dict[str, int]) -> None:
         """Log the series totals."""
         self._emit({"event": "series_end", "totals": totals})

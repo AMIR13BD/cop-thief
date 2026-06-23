@@ -45,9 +45,11 @@ _COMMON_RULES = (
 _ROLE_GOAL = {
     "cop": (
         "You are the COP. You win by moving onto the thief's cell. As an alternative to "
-        "moving you may drop a barrier on your OWN current cell (action type 'barrier', "
-        "'to' equal to your own position) up to your remaining budget; it becomes "
-        "impassable for both of you."
+        "moving you may drop a barrier on an ADJACENT empty cell (action type 'barrier', "
+        "'to' = one of the 8 neighbours of your current cell; it must be on the board, "
+        "not your own cell, not the thief's cell, and not already a barrier) up to your "
+        "remaining budget. The barrier becomes impassable for both of you and you do not "
+        "move that turn."
     ),
     "thief": (
         "You are the THIEF. You win by surviving every move without the cop landing on "

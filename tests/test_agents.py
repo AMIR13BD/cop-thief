@@ -45,11 +45,18 @@ def test_illegal_llm_move_is_sanitised_to_a_legal_one():
     assert chosen.to.to_list() in [list(c) for c in _legal(obs)]
 
 
-def test_valid_cop_barrier_on_own_cell_is_accepted():
-    action = Action(ActionType.BARRIER, Position(2, 2))  # cop's own cell
+def test_valid_cop_barrier_on_adjacent_cell_is_accepted():
+    action = Action(ActionType.BARRIER, Position(1, 1))  # adjacent to cop at (2,2)
     agent = build_cop_agent(PARAMS, llm=_FakeLLM(action))
     _, chosen = agent.decide(_cop_obs(), [])
     assert chosen == action
+
+
+def test_cop_barrier_on_own_cell_is_rejected():
+    action = Action(ActionType.BARRIER, Position(2, 2))  # own cell — illegal under deviation
+    agent = build_cop_agent(PARAMS, llm=_FakeLLM(action))
+    _, chosen = agent.decide(_cop_obs(), [])
+    assert chosen != action  # sanitised to a legal heuristic move
 
 
 def test_llm_failure_falls_back_to_heuristic():

@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-import os
-
+from ..config import Config
 from ..game.actions import Role
 from .server_app import run_server
 
 
 def main() -> None:
-    """Bind the cop server from ``COP_SERVER_HOST`` / ``COP_SERVER_PORT``."""
-    host = os.getenv("COP_SERVER_HOST", "127.0.0.1")
-    port = int(os.getenv("COP_SERVER_PORT", "8101"))
+    """Bind the cop server from config (``COP_SERVER_HOST``/``COP_SERVER_PORT`` override)."""
+    host, port = Config.load().mcp_bind("cop")
     run_server(Role.COP, host, port)
 
 

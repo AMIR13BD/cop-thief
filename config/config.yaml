@@ -30,6 +30,21 @@ turn:
   timeout_seconds: 30      # per-turn budget (SHARED_MATCH_RULES.md §2.5)
   reprompt_on_timeout: true  # one re-prompt, then concede the sub-game
 
+# Local MCP server bind + client-connection. The orchestrator (MCP client) drives
+# the game through these two servers over HTTP. For the cloud stage, point the URLs
+# at the public HTTPS tunnels instead — only the scheme/host change. (The URLs that
+# go INTO the §9.1 report live under `team.*`, not here.)
+# Env overrides: COP_SERVER_HOST/COP_SERVER_PORT, THIEF_SERVER_HOST/THIEF_SERVER_PORT,
+# and COP_MCP_URL / THIEF_MCP_URL (full URL override, e.g. the cloud HTTPS endpoint).
+mcp:
+  path: "/mcp"             # FastMCP streamable-HTTP mount path
+  cop:
+    host: "127.0.0.1"
+    port: 8101
+  thief:
+    host: "127.0.0.1"
+    port: 8102
+
 match:
   seed: 42                 # shared RNG seed for reproducible start positions (set per match)
   rate_limit_per_min: 30   # cap outbound calls per direction (SHARED_MATCH_RULES.md §3)

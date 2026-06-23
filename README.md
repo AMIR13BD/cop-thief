@@ -117,7 +117,7 @@ The chase is a **Decentralized Partially Observable Markov Decision Process**
 |---|---|
 | **n** | `2` agents — cop (`i=1`) and thief (`i=2`). |
 | **S** | State = (cop cell, thief cell, barrier set `B ⊆ cells`, side-to-move, thief-move count, barriers used). On an `R×C` grid, `\|S\|` is bounded by `(R·C)² · 2^{R·C} · …`. |
-| **{Aᵢ}** | `A_thief` = the ≤8 king-moves to adjacent cells. `A_cop` = those moves **plus** "place a barrier on my own cell" while budget remains. |
+| **{Aᵢ}** | `A_thief` = the ≤8 king-moves to adjacent cells. `A_cop` = those moves **plus** "place a barrier on an adjacent empty cell" while budget remains (see the barrier note in §7). |
 | **P** | Deterministic, turn-based transition (`game/engine.py`): apply the mover's action, then check capture/termination. Thief moves first, cop replies. |
 | **R** | Terminal team reward (`game/scoring.py`): capture → cop `20`, thief `5`; escape → cop `5`, thief `10`. |
 | **{Ωᵢ}** | Observation space per agent = (own cell, opponent cell *or* `hidden`, the subset of barriers within vision). |
@@ -130,26 +130,40 @@ deceptive) messages — never on the global state — this is genuinely
 
 ## 5. MCP server / client model
 
-The key architectural rule (assignment §5.2): **the LLM is not hosted inside the
-MCP server.** The server is a thin boundary that exposes *tools*; the **client
-(our orchestrator)** holds the LLM and the game logic.
+The key architectural rule (assignment §5.2 / §14): **the LLM is not hosted inside
+the MCP server — and neither is the authoritative game state.** Each MCP server is
+a thin per-agent boundary that exposes *tools only*; the **client (our
+orchestrator)** holds the LLM **and** the single referee, and drives the whole
+series through the servers' tools over HTTP.
 
-- **MCP client** = `orchestrator/` — builds each agent's observation, asks the
-  LLM (or heuristic) for a decision, and calls the referee to apply it.
+- **MCP client** = `orchestrator/mcp_series.py` — owns the one authoritative
+  `SubGameReferee`, computes each agent's partial observation, **decides
+  client-side** (LLM or heuristic), and routes every turn through both servers.
+  Run it with `cop-thief run --mcp` (start the two servers first). The server
+  URLs come from `config.yaml` → `mcp.*` (`{COP,THIEF}_MCP_URL` override for the
+  cloud HTTPS endpoints).
 - **MCP servers** = `mcp_servers/cop_server.py`, `thief_server.py`, built on
-  **FastMCP**. Each exposes:
+  **FastMCP**, one per agent on its own localhost port. Each exposes tools only —
+  no game logic, no LLM:
   - `health()` — liveness (no auth);
-  - `whose_turn()` — turn / over flags;
-  - `observe()` — this role's legal partial observation;
-  - `submit_turn(message, action, move_number)` — validate + apply a turn;
-  - `reset()` — advance to the next sub-game.
-- Every state-changing tool calls `_authorize()`, which checks the
-  `Authorization: Bearer <token>` header (`security/auth.py`). The authoritative
-  state is a single `SubGameReferee` (SHARED_MATCH_RULES.md §2.1).
+  - `set_context(observation, position)` — the client shares this agent's current
+    partial observation and true cell;
+  - `observe()` — the agent reads back its legal partial observation;
+  - `submit_turn(message, action)` — the agent **sends + records** its
+    natural-language message and chosen action;
+  - `last_message()` — the opponent reads this agent's most recent message;
+  - `verify_location(claim)` — mutual location verification (§5.1).
+- Every tool except `health()` calls `_authorize()`, which checks the
+  `Authorization: Bearer <token>` header (`security/auth.py`); with no token
+  configured (local dev) auth is open.
+- The outcome is always decided by the orchestrator's referee on the binding
+  `action`, **never** by the (bluffable) `message`.
 
-The **internal** series runs the whole loop in-process for speed and
-determinism; the MCP servers expose the same operations for the cloud /
-inter-group match, where one team's cop server is the referee.
+An in-process runner (`orchestrator/runner.py`, used by the GUI and by
+`cop-thief run` *without* `--mcp`) plays the identical game without the network
+for speed and determinism; `--mcp` runs the same logic through the live servers.
+Technical Losses (transport failures) are retried, then the sub-game is voided
+and re-run until 6 valid sub-games complete (§9).
 
 ## 6. Natural-language communication design
 
@@ -180,9 +194,20 @@ Each turn carries two things (SHARED_MATCH_RULES.md §2.2):
 - **Turns**: thief first, then cop, repeating. A sub-game lasts ≤ 25 **thief**
   moves; the thief wins if it finishes its 25th move uncaught (the cop's reply is
   its last chance).
-- **Barriers**: instead of moving, the **cop** may drop a barrier on its **own**
-  cell (≤ 5/sub-game). The cell becomes impassable for both; the thief cannot
-  place barriers. **Stepping into a barrier loses** the sub-game.
+- **Barriers**: instead of moving, the **cop** may drop a barrier on an
+  **adjacent empty cell** — any of the 8 neighbours that is on the board, not the
+  cop's own cell, not the thief's cell, and not already a barrier (≤ 5/sub-game).
+  The cop does not move that turn. The cell becomes impassable for both; the thief
+  cannot place barriers. If no valid neighbour exists, the barrier action is
+  unavailable that turn. **Stepping into a barrier loses** the sub-game.
+
+  > **Documented design decision — deliberate deviation from assignment §4.3.**
+  > The assignment specifies the barrier is placed on the cop's **own current
+  > cell**. This project instead places it on an **adjacent empty cell**, a team
+  > design choice that makes the barrier a usable tool for cutting off the thief's
+  > escape routes rather than only the cell the cop is leaving. This is a conscious
+  > deviation from the literal spec (not an oversight) and is to be confirmed with
+  > the TA. The validation lives in `game/engine.py::_validate_barrier`.
 - **Capture**: cop and thief on the **same cell**, checked after every move. A
   pass-through swap is not a capture (turns are sequential, so this is automatic).
 - **Win**: cop wins on capture; thief wins by surviving.
@@ -266,19 +291,23 @@ uv run python -m cop_thief.mcp_servers.cop_server     # binds 127.0.0.1:8101
 uv run python -m cop_thief.mcp_servers.thief_server   # binds 127.0.0.1:8102
 ```
 
-Host/port come from `COP_SERVER_HOST/PORT` and `THIEF_SERVER_HOST/PORT`. Set
-`MCP_AUTH_TOKEN` to require a bearer token on every state-changing tool. For the
-cloud stage, front each server with TLS (ngrok Traffic Policy / Localtonet /
-Nginx) so the four MCP URLs are **HTTPS**, and exchange tokens out of band.
+Bind host/port come from `config.yaml` → `mcp.{cop,thief}` (overridable by
+`COP_SERVER_HOST/PORT` and `THIEF_SERVER_HOST/PORT`). Set `MCP_AUTH_TOKEN` to
+require a bearer token on every tool except `health()`. For the cloud stage,
+front each server with TLS (ngrok Traffic Policy / Localtonet / Nginx) so the
+four MCP URLs are **HTTPS**, and exchange tokens out of band.
 
 ## 12. How to run the full 6-game series
 
 ```bash
-uv run cop-thief run            # 6 sub-games, report, no email
+uv run cop-thief run            # 6 sub-games in-process, report, no email
+uv run cop-thief run --mcp      # drive the series THROUGH the two running servers
 uv run cop-thief run --email    # also email the JSON report (Gmail API)
 uv run cop-thief run --no-log   # skip the JSONL turn log
 ```
 
+`--mcp` is the assignment's target topology (§6 stage 1): start both servers
+(§11) in separate terminals, then run the client — every turn flows over MCP.
 The number of sub-games, grid size, scoring, vision radius, seed, etc. are all
 read from `config.yaml`.
 

@@ -1,23 +1,28 @@
-"""Shared FastMCP application factory for the cop and thief servers.
+"""Shared FastMCP application factory for the cop and thief agent endpoints.
 
-The MCP server is the network boundary: it exposes *tools* over HTTPS and never
-hosts the LLM (assignment §5.2). The authoritative state lives in a
-:class:`SubGameReferee`; tools fetch the legal observation and submit validated
-turns. Every state-changing tool requires a bearer token in the Authorization
-header (assignment §6 / SHARED_MATCH_RULES.md §3).
+Architecture (assignment §5.2 / §14): the LLM **and** the single authoritative
+game state live in the **client** (the orchestrator the students build). Each MCP
+server is a *thin per-agent boundary that exposes tools only* — it never runs the
+LLM and it is not the referee. Its tools cover exactly what §5.1 calls for:
+
+* receiving/serving an agent's current observation,
+* sending + recording its natural-language message and chosen action,
+* mutual verification of locations.
+
+The orchestrator (the MCP client in ``orchestrator/mcp_series.py``) owns the one
+:class:`~cop_thief.orchestrator.referee.SubGameReferee` and drives the whole
+series through these tools over HTTP. Every state-changing tool requires a bearer
+token (assignment §6); when no token is configured (local dev) auth is open.
 
 ``fastmcp`` is imported lazily so importing this module never requires the SDK.
 """
 
 from __future__ import annotations
 
-import random
+from dataclasses import dataclass, field
 
 from ..config import Config
-from ..game.actions import Role, TurnPayload
-from ..game.setup import new_subgame
-from ..orchestrator.referee import SubGameReferee
-from ..orchestrator.results import _record_dict
+from ..game.actions import Role
 from ..security.auth import require_bearer
 from ..security.tokens import resolve_expected_token
 
@@ -38,70 +43,78 @@ def _authorize() -> None:
     require_bearer(_incoming_authorization(), resolve_expected_token())
 
 
-class _ServerState:
-    """Holds the role's referee and advances through the series of sub-games."""
+@dataclass
+class _Endpoint:
+    """Per-agent scratch state pushed/pulled by the client. NOT authoritative.
 
-    def __init__(self, role: Role, config: Config) -> None:
-        self.role = role
-        self.params = config.game_params()
-        self.vision = config.vision_radius
-        self._rng = random.Random(config.seed)
-        self.sub_game = 0
-        self.referee: SubGameReferee = self._next()
+    The authoritative game state lives in the orchestrator; this only mirrors what
+    the client shares so the agent can read its observation and the opponent can
+    read this agent's last message over MCP.
+    """
 
-    def _next(self) -> SubGameReferee:
-        self.sub_game += 1
-        return SubGameReferee(new_subgame(self.sub_game, self.params, self._rng), self.vision)
-
-    def reset(self) -> int:
-        self.referee = self._next()
-        return self.sub_game
+    role: Role
+    observation: dict = field(default_factory=dict)
+    position: list[int] | None = None
+    last_message: str = ""
+    last_action: dict | None = None
 
 
 def build_mcp_app(role: Role, config: Config | None = None):
-    """Create the FastMCP app exposing this role's tools."""
+    """Create the FastMCP app exposing this agent's tools."""
     from fastmcp import FastMCP
 
-    state = _ServerState(role, config or Config.load())
+    _ = config or Config.load()  # reserved for future per-server configuration
+    state = _Endpoint(role=role)
     mcp = FastMCP(f"cop-thief-{role.value}")
 
     @mcp.tool
     def health() -> dict:
-        """Liveness probe (no auth) for deployment checks."""
-        return {"status": "ok", "role": role.value, "sub_game": state.sub_game}
+        """Liveness probe (no auth) for deployment/readiness checks."""
+        return {"status": "ok", "role": role.value}
 
     @mcp.tool
-    def whose_turn() -> dict:
-        """Whether it is this role's turn and whether the sub-game is over."""
+    def set_context(observation: dict, position: list[int]) -> dict:
+        """Client pushes this agent's current partial observation and true cell."""
         _authorize()
-        return {"to_move": state.referee.whose_turn().value, "over": state.referee.is_over()}
+        state.observation = dict(observation)
+        state.position = list(position)
+        return {"ok": True, "role": role.value}
 
     @mcp.tool
     def observe() -> dict:
-        """This role's legal partial observation (own cell + what is in vision)."""
+        """Return this agent's current legal partial observation."""
         _authorize()
-        return state.referee.observe(role)
+        return state.observation
 
     @mcp.tool
-    def submit_turn(message: str, action: dict, move_number: int = 0) -> dict:
-        """Validate and apply a turn; the result is decided by ``action``, not ``message``."""
+    def submit_turn(message: str, action: dict) -> dict:
+        """Send + record this agent's NL message and chosen action.
+
+        The outcome is decided by ``action`` (validated by the orchestrator's
+        referee), never by ``message`` — which is free text and may bluff.
+        """
         _authorize()
-        payload = TurnPayload.from_dict(
-            {
-                "sub_game": state.sub_game,
-                "move_number": move_number,
-                "role": role.value,
-                "message": message,
-                "action": action,
-            }
-        )
-        return _record_dict(state.referee.submit(payload))
+        state.last_message = message
+        state.last_action = dict(action)
+        return {"role": role.value, "message": message, "action": dict(action)}
 
     @mcp.tool
-    def reset() -> dict:
-        """Advance to the next sub-game in the series."""
+    def last_message() -> dict:
+        """Return this agent's most recent NL message (read by the opponent)."""
         _authorize()
-        return {"sub_game": state.reset()}
+        return {"role": role.value, "message": state.last_message}
+
+    @mcp.tool
+    def verify_location(claim: list[int]) -> dict:
+        """Mutual location verification (§5.1): does ``claim`` match the true cell?"""
+        _authorize()
+        actual = state.position
+        return {
+            "role": role.value,
+            "claim": list(claim),
+            "actual": actual,
+            "match": actual is not None and list(claim) == actual,
+        }
 
     return mcp
 

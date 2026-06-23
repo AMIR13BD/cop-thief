@@ -85,3 +85,28 @@ class Config:
     def turn(self) -> dict:
         """Per-turn timeout / re-prompt policy."""
         return self.raw["turn"]
+
+    @property
+    def match(self) -> dict:
+        """Match-level policy (seed, rate limit, retry budget)."""
+        return self.raw["match"]
+
+    def mcp_bind(self, role: str) -> tuple[str, int]:
+        """``(host, port)`` to bind ``role``'s MCP server; env overrides config."""
+        block = self.raw["mcp"][role]
+        host = os.getenv(f"{role.upper()}_SERVER_HOST", block["host"])
+        port = int(os.getenv(f"{role.upper()}_SERVER_PORT", block["port"]))
+        return host, port
+
+    def mcp_url(self, role: str) -> str:
+        """URL the orchestrator (MCP client) connects to for ``role``'s server.
+
+        ``{COP,THIEF}_MCP_URL`` fully overrides it (e.g. a cloud HTTPS tunnel);
+        otherwise it is built from the local bind host/port and the mount path.
+        """
+        override = os.getenv(f"{role.upper()}_MCP_URL")
+        if override:
+            return override
+        host, port = self.mcp_bind(role)
+        path = self.raw["mcp"].get("path", "/mcp")
+        return f"http://{host}:{port}{path}"

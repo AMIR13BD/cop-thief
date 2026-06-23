@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-import os
-
+from ..config import Config
 from ..game.actions import Role
 from .server_app import run_server
 
 
 def main() -> None:
-    """Bind the thief server from ``THIEF_SERVER_HOST`` / ``THIEF_SERVER_PORT``."""
-    host = os.getenv("THIEF_SERVER_HOST", "127.0.0.1")
-    port = int(os.getenv("THIEF_SERVER_PORT", "8102"))
+    """Bind the thief server from config (``THIEF_SERVER_HOST``/``THIEF_SERVER_PORT`` override)."""
+    host, port = Config.load().mcp_bind("thief")
     run_server(Role.THIEF, host, port)
 
 
