@@ -40,6 +40,11 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     run.add_argument("--config", default=None, help="path to config.yaml")
     run.add_argument("--provider", choices=["heuristic", "anthropic"], help="override llm.provider")
     run.add_argument("--no-log", action="store_true", help="do not write the JSONL turn log")
+    run.add_argument(
+        "--mcp",
+        action="store_true",
+        help="drive the series THROUGH the two running MCP servers (start them first)",
+    )
     run.add_argument("--email", action="store_true", help="email the report via the Gmail API")
     return parser.parse_args(argv)
 
@@ -65,8 +70,17 @@ def main(argv: list[str] | None = None) -> int:
     config = Config.load(args.config)
     if args.provider:
         config.raw["llm"]["provider"] = args.provider
-    runner = SeriesRunner(config, llm=build_llm(config.llm), log=not args.no_log)
-    series = runner.run()
+    llm = build_llm(config.llm)
+    if args.mcp:
+        from .orchestrator.mcp_series import MCPSeriesRunner
+
+        print(
+            f"Driving the series via MCP servers: cop={config.mcp_url('cop')} "
+            f"thief={config.mcp_url('thief')}"
+        )
+        series = MCPSeriesRunner(config, llm=llm, log=not args.no_log).run()
+    else:
+        series = SeriesRunner(config, llm=llm, log=not args.no_log).run()
     report = build_internal_report(series, config)
     path = write_report(report, config.report["output_dir"])
     _print_summary(series, series.totals)

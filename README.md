@@ -130,26 +130,40 @@ deceptive) messages — never on the global state — this is genuinely
 
 ## 5. MCP server / client model
 
-The key architectural rule (assignment §5.2): **the LLM is not hosted inside the
-MCP server.** The server is a thin boundary that exposes *tools*; the **client
-(our orchestrator)** holds the LLM and the game logic.
+The key architectural rule (assignment §5.2 / §14): **the LLM is not hosted inside
+the MCP server — and neither is the authoritative game state.** Each MCP server is
+a thin per-agent boundary that exposes *tools only*; the **client (our
+orchestrator)** holds the LLM **and** the single referee, and drives the whole
+series through the servers' tools over HTTP.
 
-- **MCP client** = `orchestrator/` — builds each agent's observation, asks the
-  LLM (or heuristic) for a decision, and calls the referee to apply it.
+- **MCP client** = `orchestrator/mcp_series.py` — owns the one authoritative
+  `SubGameReferee`, computes each agent's partial observation, **decides
+  client-side** (LLM or heuristic), and routes every turn through both servers.
+  Run it with `cop-thief run --mcp` (start the two servers first). The server
+  URLs come from `config.yaml` → `mcp.*` (`{COP,THIEF}_MCP_URL` override for the
+  cloud HTTPS endpoints).
 - **MCP servers** = `mcp_servers/cop_server.py`, `thief_server.py`, built on
-  **FastMCP**. Each exposes:
+  **FastMCP**, one per agent on its own localhost port. Each exposes tools only —
+  no game logic, no LLM:
   - `health()` — liveness (no auth);
-  - `whose_turn()` — turn / over flags;
-  - `observe()` — this role's legal partial observation;
-  - `submit_turn(message, action, move_number)` — validate + apply a turn;
-  - `reset()` — advance to the next sub-game.
-- Every state-changing tool calls `_authorize()`, which checks the
-  `Authorization: Bearer <token>` header (`security/auth.py`). The authoritative
-  state is a single `SubGameReferee` (SHARED_MATCH_RULES.md §2.1).
+  - `set_context(observation, position)` — the client shares this agent's current
+    partial observation and true cell;
+  - `observe()` — the agent reads back its legal partial observation;
+  - `submit_turn(message, action)` — the agent **sends + records** its
+    natural-language message and chosen action;
+  - `last_message()` — the opponent reads this agent's most recent message;
+  - `verify_location(claim)` — mutual location verification (§5.1).
+- Every tool except `health()` calls `_authorize()`, which checks the
+  `Authorization: Bearer <token>` header (`security/auth.py`); with no token
+  configured (local dev) auth is open.
+- The outcome is always decided by the orchestrator's referee on the binding
+  `action`, **never** by the (bluffable) `message`.
 
-The **internal** series runs the whole loop in-process for speed and
-determinism; the MCP servers expose the same operations for the cloud /
-inter-group match, where one team's cop server is the referee.
+An in-process runner (`orchestrator/runner.py`, used by the GUI and by
+`cop-thief run` *without* `--mcp`) plays the identical game without the network
+for speed and determinism; `--mcp` runs the same logic through the live servers.
+Technical Losses (transport failures) are retried, then the sub-game is voided
+and re-run until 6 valid sub-games complete (§9).
 
 ## 6. Natural-language communication design
 
@@ -277,19 +291,23 @@ uv run python -m cop_thief.mcp_servers.cop_server     # binds 127.0.0.1:8101
 uv run python -m cop_thief.mcp_servers.thief_server   # binds 127.0.0.1:8102
 ```
 
-Host/port come from `COP_SERVER_HOST/PORT` and `THIEF_SERVER_HOST/PORT`. Set
-`MCP_AUTH_TOKEN` to require a bearer token on every state-changing tool. For the
-cloud stage, front each server with TLS (ngrok Traffic Policy / Localtonet /
-Nginx) so the four MCP URLs are **HTTPS**, and exchange tokens out of band.
+Bind host/port come from `config.yaml` → `mcp.{cop,thief}` (overridable by
+`COP_SERVER_HOST/PORT` and `THIEF_SERVER_HOST/PORT`). Set `MCP_AUTH_TOKEN` to
+require a bearer token on every tool except `health()`. For the cloud stage,
+front each server with TLS (ngrok Traffic Policy / Localtonet / Nginx) so the
+four MCP URLs are **HTTPS**, and exchange tokens out of band.
 
 ## 12. How to run the full 6-game series
 
 ```bash
-uv run cop-thief run            # 6 sub-games, report, no email
+uv run cop-thief run            # 6 sub-games in-process, report, no email
+uv run cop-thief run --mcp      # drive the series THROUGH the two running servers
 uv run cop-thief run --email    # also email the JSON report (Gmail API)
 uv run cop-thief run --no-log   # skip the JSONL turn log
 ```
 
+`--mcp` is the assignment's target topology (§6 stage 1): start both servers
+(§11) in separate terminals, then run the client — every turn flows over MCP.
 The number of sub-games, grid size, scoring, vision radius, seed, etc. are all
 read from `config.yaml`.
 
