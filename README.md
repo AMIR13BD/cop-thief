@@ -117,7 +117,7 @@ The chase is a **Decentralized Partially Observable Markov Decision Process**
 |---|---|
 | **n** | `2` agents — cop (`i=1`) and thief (`i=2`). |
 | **S** | State = (cop cell, thief cell, barrier set `B ⊆ cells`, side-to-move, thief-move count, barriers used). On an `R×C` grid, `\|S\|` is bounded by `(R·C)² · 2^{R·C} · …`. |
-| **{Aᵢ}** | `A_thief` = the ≤8 king-moves to adjacent cells. `A_cop` = those moves **plus** "place a barrier on my own cell" while budget remains. |
+| **{Aᵢ}** | `A_thief` = the ≤8 king-moves to adjacent cells. `A_cop` = those moves **plus** "place a barrier on an adjacent empty cell" while budget remains (see the barrier note in §7). |
 | **P** | Deterministic, turn-based transition (`game/engine.py`): apply the mover's action, then check capture/termination. Thief moves first, cop replies. |
 | **R** | Terminal team reward (`game/scoring.py`): capture → cop `20`, thief `5`; escape → cop `5`, thief `10`. |
 | **{Ωᵢ}** | Observation space per agent = (own cell, opponent cell *or* `hidden`, the subset of barriers within vision). |
@@ -180,9 +180,20 @@ Each turn carries two things (SHARED_MATCH_RULES.md §2.2):
 - **Turns**: thief first, then cop, repeating. A sub-game lasts ≤ 25 **thief**
   moves; the thief wins if it finishes its 25th move uncaught (the cop's reply is
   its last chance).
-- **Barriers**: instead of moving, the **cop** may drop a barrier on its **own**
-  cell (≤ 5/sub-game). The cell becomes impassable for both; the thief cannot
-  place barriers. **Stepping into a barrier loses** the sub-game.
+- **Barriers**: instead of moving, the **cop** may drop a barrier on an
+  **adjacent empty cell** — any of the 8 neighbours that is on the board, not the
+  cop's own cell, not the thief's cell, and not already a barrier (≤ 5/sub-game).
+  The cop does not move that turn. The cell becomes impassable for both; the thief
+  cannot place barriers. If no valid neighbour exists, the barrier action is
+  unavailable that turn. **Stepping into a barrier loses** the sub-game.
+
+  > **Documented design decision — deliberate deviation from assignment §4.3.**
+  > The assignment specifies the barrier is placed on the cop's **own current
+  > cell**. This project instead places it on an **adjacent empty cell**, a team
+  > design choice that makes the barrier a usable tool for cutting off the thief's
+  > escape routes rather than only the cell the cop is leaving. This is a conscious
+  > deviation from the literal spec (not an oversight) and is to be confirmed with
+  > the TA. The validation lives in `game/engine.py::_validate_barrier`.
 - **Capture**: cop and thief on the **same cell**, checked after every move. A
   pass-through swap is not a capture (turns are sequential, so this is automatic).
 - **Win**: cop wins on capture; thief wins by surviving.

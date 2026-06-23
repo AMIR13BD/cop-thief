@@ -55,7 +55,7 @@ def test_cop_last_reply_can_still_capture():
 
 def test_record_snapshots_positions_and_barriers():
     eng = build_engine(cop=(1, 1), thief=(4, 4), to_move=Role.COP)
-    rec = eng.step(barrier(Role.COP, (1, 1)))
-    assert rec.cop == [1, 1]
+    rec = eng.step(barrier(Role.COP, (1, 2)))  # adjacent empty cell (PRD deviation)
+    assert rec.cop == [1, 1]  # cop does not move when placing a barrier
     assert rec.thief == [4, 4]
-    assert [1, 1] in rec.barriers
+    assert [1, 2] in rec.barriers

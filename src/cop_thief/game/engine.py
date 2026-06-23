@@ -44,14 +44,23 @@ class GameEngine:
         return self._validate_move(role, action)
 
     def _validate_barrier(self, role: Role, action: Action) -> ValidationResult:
-        board, pos = self.state.board, self.state.position_of(role)
+        # DELIBERATE DEVIATION from assignment §4.3 (which places the barrier on the
+        # cop's OWN cell): this project places it on an ADJACENT empty cell. Documented
+        # as a team design choice in the README. Target must be one of the 8 neighbours,
+        # on-grid, not the thief's cell, and not already a barrier (own cell is excluded
+        # automatically since it is at Chebyshev distance 0).
+        board, pos, target = self.state.board, self.state.position_of(role), action.to
         if role is not Role.COP:
             return ValidationResult(False, "thief_cannot_place_barrier")
         if self.state.barriers_remaining <= 0:
             return ValidationResult(False, "no_barriers_left")
-        if action.to != pos:
-            return ValidationResult(False, "barrier_not_on_own_cell")
-        if board.is_barrier(action.to):
+        if not board.in_bounds(target):
+            return ValidationResult(False, "barrier_off_board")
+        if chebyshev_distance(pos, target) != 1:
+            return ValidationResult(False, "barrier_not_adjacent")
+        if target == self.state.position_of(role.opponent):
+            return ValidationResult(False, "barrier_on_thief")
+        if board.is_barrier(target):
             return ValidationResult(False, "cell_already_barrier")
         return ValidationResult(True, "ok")
 

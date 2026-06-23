@@ -11,7 +11,7 @@ from __future__ import annotations
 import random
 
 from ..game.actions import Action, ActionType, Role
-from .strategies import legal_targets
+from .strategies import legal_barrier_targets, legal_targets
 
 
 class Agent:
@@ -44,8 +44,8 @@ class Agent:
     def _sanitise(self, action: Action, observation: dict) -> Action:
         """Replace an unverifiable/illegal action with a safe heuristic move."""
         if action.type is ActionType.BARRIER:
-            on_own_cell = action.to.to_list() == observation["self"]
-            if self.role is Role.COP and on_own_cell and observation["barriers_remaining"] > 0:
+            on_adjacent_cell = tuple(action.to.to_list()) in set(legal_barrier_targets(observation))
+            if self.role is Role.COP and on_adjacent_cell and observation["barriers_remaining"] > 0:
                 return action
         elif tuple(action.to.to_list()) in set(legal_targets(observation, self.eight)):
             return action
