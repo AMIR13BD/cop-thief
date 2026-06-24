@@ -75,16 +75,16 @@ llm:
   max_tokens: 400
 
 # Team identity & endpoints — these values go verbatim into the §9.1 report.
-# Kept out of code; URLs/tokens via .env. The MCP URLs stay placeholders until
-# the (deferred) cloud stage.
+# Kept out of code; the bearer token stays in .env / deploy env (never here).
+# URLs are public Cloud Run endpoints (not secret) and are safe to commit.
 team:
   group_name: "amireman"
   students:                          # "Full Name <id>"
     - "Amir Fadila <206663338>"
     - "Eman Sarhan <323047407>"
   github_repo: "https://github.com/AMIR13BD/cop-thief"
-  cop_mcp_url: "https://REPLACE_ME-cop.example.run"      # cloud stage (deferred)
-  thief_mcp_url: "https://REPLACE_ME-thief.example.run"  # cloud stage (deferred)
+  cop_mcp_url: "https://cop-thief-cop-wail7kwomq-zf.a.run.app/mcp"      # Cloud Run (me-west1)
+  thief_mcp_url: "https://cop-thief-thief-wail7kwomq-zf.a.run.app/mcp"  # Cloud Run (me-west1)
   timezone: "Asia/Jerusalem"
 
 report:

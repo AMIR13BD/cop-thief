@@ -32,7 +32,9 @@ def _incoming_authorization() -> str | None:
     try:
         from fastmcp.server.dependencies import get_http_headers
 
-        headers = {k.lower(): v for k, v in get_http_headers().items()}
+        # get_http_headers() strips ``authorization`` by default; opt back in or the
+        # bearer token never reaches the verifier (every state-changing tool 401s).
+        headers = {k.lower(): v for k, v in get_http_headers(include={"authorization"}).items()}
         return headers.get("authorization")
     except Exception:  # noqa: BLE001 — non-HTTP transport or unavailable context
         return None
