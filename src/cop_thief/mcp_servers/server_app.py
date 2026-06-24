@@ -61,18 +61,37 @@ class _Endpoint:
     last_action: dict | None = None
 
 
+# Cross-team wire-contract version advertised by ``health`` so a mismatch is
+# caught before kickoff (docs/MATCH_PROTOCOL.md §A/§D).
+PROTOCOL_VERSION = "0.1"
+
+
 def build_mcp_app(role: Role, config: Config | None = None):
     """Create the FastMCP app exposing this agent's tools."""
+    import random
+
     from fastmcp import FastMCP
 
-    _ = config or Config.load()  # reserved for future per-server configuration
+    from ..agents.cop_agent import build_cop_agent
+    from ..agents.thief_agent import build_thief_agent
+    from ..orchestrator.llm_client import build_llm
+
+    cfg = config or Config.load()
     state = _Endpoint(role=role)
+    # Our brain, server-side — used by ``play_turn`` so an opponent referee can pull
+    # this team's move (MATCH_PROTOCOL.md §D, Option 1). Falls back to the heuristic
+    # when no LLM is configured; same decision path as the self-play orchestrator.
+    params = cfg.game_params()
+    llm = build_llm(cfg.llm)
+    rng = random.Random()
+    builder = build_cop_agent if role is Role.COP else build_thief_agent
+    agent = builder(params, llm, rng)
     mcp = FastMCP(f"cop-thief-{role.value}")
 
     @mcp.tool
     def health() -> dict:
         """Liveness probe (no auth) for deployment/readiness checks."""
-        return {"status": "ok", "role": role.value}
+        return {"status": "ok", "role": role.value, "protocol": PROTOCOL_VERSION}
 
     @mcp.tool
     def set_context(observation: dict, position: list[int]) -> dict:
@@ -117,6 +136,28 @@ def build_mcp_app(role: Role, config: Config | None = None):
             "actual": actual,
             "match": actual is not None and list(claim) == actual,
         }
+
+    @mcp.tool
+    def play_turn(observation: dict, opponent_message: str = "") -> dict:
+        """Referee-driven turn (MATCH_PROTOCOL.md §D, Option 1).
+
+        The opponent team's referee passes the partial ``observation`` it computed
+        for THIS agent (engine ``build_observation`` shape) plus the opponent's last
+        natural-language line; this team's own brain decides and returns the message
+        + binding action. The result is still adjudicated by the referee on the
+        ``action`` — ``message`` may bluff and is never binding.
+        """
+        _authorize()
+        obs = dict(observation)
+        inbox = [opponent_message] if opponent_message else []
+        message, action = agent.decide(obs, inbox)
+        # Mirror to scratch state so last_message / verify_location stay coherent.
+        state.observation = obs
+        if obs.get("self") is not None:
+            state.position = list(obs["self"])
+        state.last_message = message
+        state.last_action = action.to_dict()
+        return {"role": role.value, "message": message, "action": action.to_dict()}
 
     return mcp
 

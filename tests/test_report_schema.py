@@ -2,6 +2,7 @@
 
 from cop_thief.config import Config
 from cop_thief.orchestrator.report_builder import (
+    build_bonus_from_halves,
     build_bonus_report,
     build_internal_report,
     compute_bonus_claim,
@@ -59,3 +60,38 @@ def test_bonus_report_shape_and_mutual_agreement():
     assert report["report_type"] == "bonus_game"
     assert report["mutual_agreement"] is True
     assert report["bonus_claim"] == {"Team-A": 7, "Team-B": 10}
+
+
+def _half(group: str, name: str, sub_games: list[dict]) -> dict:
+    return {
+        "group_name": name, "group": group, "role": "cop", "protocol": "0.1",
+        "github_repo": f"https://x/{name}", "students": [f"{name} <1>"],
+        "cop_mcp_url": f"https://{name}-cop", "thief_mcp_url": f"https://{name}-thief",
+        "timezone": "Asia/Jerusalem", "sub_games": sub_games, "totals": {},
+    }
+
+
+def _sub(idx: int, cop: int, thief: int) -> dict:
+    return {"sub_game": idx, "result": "x", "reason": "y", "moves": 5,
+            "score": {"cop": cop, "thief": thief}, "start": {}, "barriers": []}
+
+
+def test_merge_halves_maps_cop_thief_scores_to_groups():
+    # Group 1 cop in 1-3 (wins all), Group 2 cop in 4-6 (wins all).
+    g1 = _half("1", "Alpha", [_sub(1, 20, 5), _sub(2, 20, 5), _sub(3, 20, 5)])
+    g2 = _half("2", "Beta", [_sub(6, 20, 5), _sub(4, 20, 5), _sub(5, 20, 5)])
+    report = build_bonus_from_halves(g2, g1)  # order-independent
+    assert set(report) == _BONUS_KEYS
+    # Each group: own cop wins (60) + opponent's thief points against them (15) = 75 each -> tie.
+    assert report["totals_by_group"] == {"Alpha": 75, "Beta": 75}
+    assert report["bonus_claim"] == {"Alpha": 5, "Beta": 5}
+    assert [s["sub_game"] for s in report["sub_games"]] == [1, 2, 3, 4, 5, 6]
+    assert report["groups"] == {"group_1": "Alpha", "group_2": "Beta"}
+
+
+def test_merge_halves_requires_one_of_each_group():
+    g1 = _half("1", "Alpha", [_sub(1, 20, 5)])
+    import pytest
+
+    with pytest.raises(ValueError, match="group-1 half and one group-2 half"):
+        build_bonus_from_halves(g1, _half("1", "Beta", [_sub(2, 20, 5)]))
