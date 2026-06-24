@@ -19,6 +19,10 @@ COP_SERVICE="${COP_SERVICE:-cop-thief-cop}"
 THIEF_SERVICE="${THIEF_SERVICE:-cop-thief-thief}"
 # Reuse a token if provided, else generate a strong one and save it locally.
 TOKEN="${MCP_AUTH_TOKEN:-$(python3 -c 'import secrets;print(secrets.token_urlsafe(32))')}"
+# If an OpenAI key is in the environment, inject it so server-side play_turn can use
+# the LLM (config llm.provider=openai). Accepts the standard name or this repo's
+# OPEN_API_KEY. Injected at deploy time only — never baked into the image (.dockerignore).
+OPENAI_KEY="${OPENAI_API_KEY:-${OPEN_API_KEY:-}}"
 
 PROJECT="$(gcloud config get-value project 2>/dev/null)"
 [ -n "$PROJECT" ] || { echo "No project set. Run: gcloud config set project <ID>"; exit 1; }
@@ -29,12 +33,14 @@ gcloud services enable run.googleapis.com cloudbuild.googleapis.com
 
 deploy_role () {  # $1=service  $2=role
   echo ">> Deploying $1 (role=$2)..."
+  local env_vars="MCP_ROLE=$2,MCP_AUTH_TOKEN=$TOKEN"
+  [ -n "$OPENAI_KEY" ] && env_vars="$env_vars,OPENAI_API_KEY=$OPENAI_KEY"
   gcloud run deploy "$1" \
     --source . \
     --region "$REGION" \
     --allow-unauthenticated \
     --max-instances=1 \
-    --set-env-vars "MCP_ROLE=$2,MCP_AUTH_TOKEN=$TOKEN"
+    --set-env-vars "$env_vars"
 }
 
 deploy_role "$COP_SERVICE"   cop

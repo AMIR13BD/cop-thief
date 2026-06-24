@@ -69,9 +69,9 @@ match:
   max_retries: 3           # transient-error retries before declaring a Technical Loss
 
 llm:
-  provider: heuristic      # "anthropic" = cloud API; "heuristic" = offline deterministic
-  model: claude-opus-4-8   # cheaper option for this short-token workload: claude-haiku-4-5
-  temperature: 0.7         # only sent to models that accept sampling (Haiku/Sonnet, not Opus 4.7+)
+  provider: openai         # "openai" | "anthropic" = cloud API; "heuristic" = offline deterministic
+  model: gpt-4o-mini       # OpenAI model w/ structured outputs; for anthropic use e.g. claude-opus-4-8
+  temperature: 0.7         # only sent to models that accept sampling (not Opus 4.7+/o-series)
   max_tokens: 400
 
 # Team identity & endpoints — these values go verbatim into the §9.1 report.

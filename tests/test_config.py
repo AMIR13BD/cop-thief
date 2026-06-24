@@ -22,7 +22,7 @@ def test_scoring_table_matches_spec():
 def test_typed_accessors_are_present():
     config = Config.load()
     assert config.vision_radius == 2
-    assert config.llm["provider"] in {"heuristic", "anthropic"}
+    assert config.llm["provider"] in {"heuristic", "anthropic", "openai"}
     assert "dir" in config.logging
     assert "timeout_seconds" in config.turn
     assert "recipient" in config.report

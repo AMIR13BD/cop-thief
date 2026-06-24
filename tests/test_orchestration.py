@@ -18,10 +18,12 @@ def test_prompts_mention_role_and_carry_messages():
     assert ACTION_SCHEMA["required"] == ["message", "action"]
 
 
-def test_accepts_temperature_excludes_opus_and_fable():
+def test_accepts_temperature_excludes_opus_fable_and_o_series():
     assert _accepts_temperature("claude-haiku-4-5") is True
+    assert _accepts_temperature("gpt-4o-mini") is True
     assert _accepts_temperature("claude-opus-4-8") is False
     assert _accepts_temperature("claude-fable-5") is False
+    assert _accepts_temperature("o3-mini") is False
 
 
 def test_build_llm_returns_none_without_anthropic_provider():
@@ -31,6 +33,19 @@ def test_build_llm_returns_none_without_anthropic_provider():
 def test_build_llm_returns_none_without_api_key(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     assert build_llm({"provider": "anthropic", "model": "x"}) is None
+
+
+def test_build_llm_openai_needs_a_key(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("OPEN_API_KEY", raising=False)
+    assert build_llm({"provider": "openai", "model": "gpt-4o-mini"}) is None
+
+
+def test_build_llm_openai_builds_with_either_key_name(monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("OPEN_API_KEY", "sk-test-not-real")
+    client = build_llm({"provider": "openai", "model": "gpt-4o-mini"})
+    assert client is not None and client.model == "gpt-4o-mini"
 
 
 def test_turn_log_writer_emits_one_line_per_event(tmp_path):
