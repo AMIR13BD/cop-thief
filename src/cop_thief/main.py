@@ -46,6 +46,9 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         help="drive the series THROUGH the two running MCP servers (start them first)",
     )
     run.add_argument("--email", action="store_true", help="email the report via the Gmail API")
+    pc = sub.add_parser("peer-check", help="probe a peer team's MCP server (reachability + tools)")
+    pc.add_argument("url", help="peer MCP server URL (e.g. https://thief-mcp-beta.example.run/mcp)")
+    pc.add_argument("--token", default=None, help="bearer token (default: $MCP_PEER_TOKEN)")
     return parser.parse_args(argv)
 
 
@@ -63,10 +66,18 @@ def main(argv: list[str] | None = None) -> int:
     import sys
 
     raw = list(sys.argv[1:] if argv is None else argv)
-    if not raw or raw[0] != "run":  # default to the `run` subcommand
+    if not raw or raw[0] not in {"run", "peer-check"}:  # default to the `run` subcommand
         raw = ["run", *raw]
     args = _parse_args(raw)
     _load_dotenv()
+    if args.command == "peer-check":
+        import json
+
+        from .orchestrator.peer_check import peer_check
+
+        result = peer_check(args.url, args.token)
+        print(json.dumps(result, indent=2))
+        return 0 if result.get("reachable") else 1
     config = Config.load(args.config)
     if args.provider:
         config.raw["llm"]["provider"] = args.provider

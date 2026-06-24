@@ -1,0 +1,25 @@
+# Keep the build context small and — critically — keep secrets OUT of the image.
+# Tokens are injected at deploy time via Cloud Run env/secrets, never baked in.
+.env
+credentials.json
+token.json
+*.pem
+*.key
+
+.git
+.venv
+venv
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+results/
+docs/
+tests/
+*.md
+!README.md
