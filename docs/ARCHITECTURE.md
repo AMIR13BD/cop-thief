@@ -13,7 +13,11 @@ Deeper companion to the README's architecture section.
 | `game/scoring.py` | `R`: `ScoringTable`, `score_subgame`, `accumulate` | none |
 | `game/engine.py` | `P`: validate, apply, capture, adjudicate (the referee's rules) | none |
 | `game/setup.py` | seeded initial state distribution | none |
-| `agents/strategies.py` | offline heuristic policies + legal-target helper | none |
+| `agents/geometry.py` | barrier-aware BFS distance, mobility, legal-move helpers | none |
+| `agents/tuning.py` | config-driven strategy weights (`Tuning`) | none |
+| `agents/thief_policy.py` | `HeuristicThief`: safety/distance/mobility/lookahead evasion | none |
+| `agents/cop_policy.py` | `HeuristicCop`: shortest-path chase + value-gated barriers | none |
+| `agents/strategies.py` | back-compat re-exports of the policies + helpers | none |
 | `agents/messages.py` | natural-language message composition (with bluffing) | none |
 | `agents/base_agent.py` | `Agent`: observation → `(message, action)`, LLM + sanitise | none |
 | `agents/cop_agent.py` / `thief_agent.py` | role-specific agent factories | none |
