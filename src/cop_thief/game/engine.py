@@ -44,11 +44,11 @@ class GameEngine:
         return self._validate_move(role, action)
 
     def _validate_barrier(self, role: Role, action: Action) -> ValidationResult:
-        # DELIBERATE DEVIATION from assignment §4.3 (which places the barrier on the
-        # cop's OWN cell): this project places it on an ADJACENT empty cell. Documented
-        # as a team design choice in the README. Target must be one of the 8 neighbours,
-        # on-grid, not the thief's cell, and not already a barrier (own cell is excluded
-        # automatically since it is at Chebyshev distance 0).
+        # DEVIATION from assignment §4.3 (which places the barrier on the cop's OWN
+        # cell): this project places it on an ADJACENT empty cell. Lecturer-confirmed;
+        # documented in docs/SHARED_MATCH_RULES.md §2.4 and the README. Target must be
+        # one of the 8 neighbours, on-grid, not the thief's cell, and not already a
+        # barrier (own cell is excluded automatically since it is at Chebyshev dist 0).
         board, pos, target = self.state.board, self.state.position_of(role), action.to
         if role is not Role.COP:
             return ValidationResult(False, "thief_cannot_place_barrier")

@@ -21,6 +21,12 @@ observation:
   vision_radius: 2         # Chebyshev (king-move) radius; opponent/barriers seen within it
   start_outside_vision: true   # place start cells beyond each other's vision radius
 
+# Heuristic-agent tuning (offline demo policy; strategy quality is not graded, §3).
+# These shape WHEN the cop spends a turn placing a barrier instead of chasing.
+strategy:
+  cop_barrier_prob: 0.65   # per-turn chance the cop walls a flight lane when one helps (0 = never)
+  cop_barrier_min_gap: 2   # only consider a barrier when the visible thief is >= this far away
+
 referee:
   # Single authoritative state owner. For internal games this engine is always referee.
   # In the bonus match the cop's team engine is referee (SHARED_MATCH_RULES.md §2.1).
@@ -56,13 +62,14 @@ llm:
   temperature: 0.7         # only sent to models that accept sampling (Haiku/Sonnet, not Opus 4.7+)
   max_tokens: 400
 
-# Team identity & endpoints — fill per match (kept out of code; URLs/tokens via .env).
+# Team identity & endpoints — FILL IN before the graded run (these values go
+# verbatim into the §9.1 report). Kept out of code; URLs/tokens via .env.
 team:
-  group_name: "Team-Alpha"
-  students: []             # ["Full Name <id>", ...]
-  github_repo: "https://github.com/AMIR13BD/cop-thief"
-  cop_mcp_url: "https://REPLACE_ME-cop.example.run"
-  thief_mcp_url: "https://REPLACE_ME-thief.example.run"
+  group_name: "REPLACE_ME-group"     # e.g. "Group 7"
+  students: []                       # REQUIRED: ["Full Name <id>", ...]
+  github_repo: "https://github.com/AMIR13BD/cop-thief"   # confirm before submitting
+  cop_mcp_url: "https://REPLACE_ME-cop.example.run"      # cloud stage (deferred)
+  thief_mcp_url: "https://REPLACE_ME-thief.example.run"  # cloud stage (deferred)
   timezone: "Asia/Jerusalem"
 
 report:

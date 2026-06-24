@@ -1,11 +1,14 @@
 """Barrier rules (PRD deviation from §4.3): cop-only, on an ADJACENT empty cell,
 budget cap, impassability for both, illegal entry, and the no-valid-cell case."""
 
+import random
+
 from _helpers import barrier, build_engine, move
 from cop_thief.agents.strategies import legal_barrier_targets
 from cop_thief.game.actions import Role
 from cop_thief.game.board import Position
 from cop_thief.game.observation import build_observation
+from cop_thief.game.setup import GameParams, new_subgame
 
 
 def test_cop_places_barrier_on_adjacent_cell():
@@ -75,6 +78,24 @@ def test_barrier_blocks_both_agents():
     assert eng.validate(Role.COP, move(Role.COP, (1, 2)).action).reason == "into_barrier"
     # but moving to another free neighbour is fine
     assert eng.validate(Role.COP, move(Role.COP, (2, 2)).action).legal
+
+
+def test_barriers_remaining_decreases_on_each_placement():
+    eng = build_engine(cop=(1, 1), thief=(4, 4), to_move=Role.COP, max_barriers=5)
+    assert eng.state.barriers_remaining == 5
+    eng.step(barrier(Role.COP, (1, 2)))
+    assert eng.state.barriers_remaining == 4
+    eng.state.to_move = Role.COP  # force another cop turn for the test
+    eng.step(barrier(Role.COP, (1, 0)))
+    assert eng.state.barriers_remaining == 3
+
+
+def test_barriers_reset_for_a_fresh_subgame():
+    params = GameParams(5, 5, 25, 6, 5, True, 2, True)
+    state = new_subgame(2, params, random.Random(0))
+    assert state.barriers_used == 0
+    assert state.barriers_remaining == 5
+    assert state.board.barriers == set()
 
 
 def test_no_valid_adjacent_cell_makes_barrier_unavailable():

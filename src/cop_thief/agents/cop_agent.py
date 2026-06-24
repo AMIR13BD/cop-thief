@@ -16,7 +16,11 @@ def build_cop_agent(params: GameParams, llm=None, rng: random.Random | None = No
     return Agent(
         role=Role.COP,
         eight_directional=params.eight_directional,
-        strategy=HeuristicCop(params.eight_directional),
+        strategy=HeuristicCop(
+            params.eight_directional,
+            barrier_prob=params.cop_barrier_prob,
+            barrier_min_gap=params.cop_barrier_min_gap,
+        ),
         messenger=Messenger(Role.COP, bluff_prob=0.1),
         llm=llm,
         rng=rng,

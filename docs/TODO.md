@@ -35,14 +35,16 @@ Status: ✅ done · 🔜 next · ⬜ not started. Order follows assignment §13.
   per-turn natural-language messages. Run `cop-thief-gui`. *DoD: renders the series
   with play/step/restart controls — met.*
 
-## Phase 7 — Cloud deployment 🔜
+## Phase 7 — Cloud deployment 🔜 (deferred — not part of the completed local section)
 - ⬜ Front each server with TLS (ngrok / Localtonet / Nginx); exchange HTTPS URLs
   and tokens out of band — *DoD: peer reaches `health()` over HTTPS with a token.*
 
-## Phase 8 — Gmail reporting ✅
-- ✅ Internal & bonus report builders (`orchestrator/report_builder.py`).
-- ✅ Gmail API sender, body = JSON only (`orchestrator/gmail_sender.py`).
-- 🔜 One-time: create OAuth Desktop client, add test user, drop `credentials.json`.
+## Phase 8 — Reporting
+- ✅ Internal & bonus report builders; JSON report **written to `results/reports/`**
+  (`orchestrator/report_builder.py`). This is what the local run produces.
+- 🔜 *Deferred:* Gmail send (body = JSON only) is scaffolded in
+  `orchestrator/gmail_sender.py` but not wired into the completed local section;
+  it needs the one-time OAuth Desktop client + `credentials.json` and `--email`.
 
 ## Cross-cutting ✅
 - ✅ Config-driven, no hard-coding; `.env.example`; secrets git-ignored.

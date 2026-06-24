@@ -21,9 +21,9 @@ servers never call it.
 
 Built by `build_system_prompt(role)` in `orchestrator/prompts.py`:
 
-- **Objective** — cop: *win by moving onto the thief; may drop a barrier on your
-  own cell.* thief: *survive every move; you cannot place barriers; use your
-  message to mislead.*
+- **Objective** — cop: *win by moving onto the thief; may drop a barrier on an
+  adjacent empty cell instead of moving.* thief: *survive every move; you cannot
+  place barriers; use your message to mislead.*
 - **Common rules** — `[row,col]` origin top-left; 8-directional adjacency; stay on
   board; never enter a barrier; you see opponent/barriers only within your vision
   radius and otherwise reason from (possibly bluffed) messages; *the outcome is
@@ -48,9 +48,10 @@ Built by `build_user_prompt(observation, inbox)`:
 ## Safety / robustness
 
 The agent **sanitises** the returned action (`agents/base_agent.py`): a move must
-be in the legal-target set; a barrier must be on the cop's own cell with budget
-remaining. Anything else (or any SDK/network error) falls back to the
-deterministic heuristic, so a bad reply never forfeits a sub-game.
+be in the legal-target set; a barrier must land on an **adjacent empty cell**
+(one of the 8 neighbours, not the cop's own cell, not the thief's, not an existing
+barrier) with budget remaining. Anything else (or any SDK/network error) falls
+back to the deterministic heuristic, so a bad reply never forfeits a sub-game.
 
 ## Prompt-engineering notes
 

@@ -26,6 +26,8 @@ class GameParams:
     eight_directional: bool
     vision_radius: int
     start_outside_vision: bool
+    cop_barrier_prob: float = 0.5
+    cop_barrier_min_gap: int = 2
 
 
 def _draw_start(params: GameParams, rng: random.Random) -> tuple[Position, Position]:
