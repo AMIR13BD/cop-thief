@@ -49,6 +49,27 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     pc = sub.add_parser("peer-check", help="probe a peer team's MCP server (reachability + tools)")
     pc.add_argument("url", help="peer MCP server URL (e.g. https://thief-mcp-beta.example.run/mcp)")
     pc.add_argument("--token", default=None, help="bearer token (default: $MCP_PEER_TOKEN)")
+    pm = sub.add_parser(
+        "peer-match", help="referee our cop half of an inter-group match (MATCH_PROTOCOL §D)"
+    )
+    pm.add_argument("peer_thief_url", help="opponent thief server URL we pull moves from")
+    pm.add_argument("--token", default=None, help="bearer token to send (default: $MCP_PEER_TOKEN)")
+    pm.add_argument("--config", default=None, help="path to config.yaml")
+    pm.add_argument("--provider", choices=["heuristic", "anthropic"], help="override llm.provider")
+    pm.add_argument(
+        "--group",
+        choices=["1", "2"],
+        default="1",
+        help="which group we are: 1 -> sub-games 1-3, 2 -> sub-games 4-6 (default 1)",
+    )
+    pm.add_argument("--num-games", type=int, default=3, help="sub-games in our half (default 3)")
+    pm.add_argument("--no-log", action="store_true", help="do not write the JSONL turn log")
+    pr = sub.add_parser(
+        "peer-report", help="merge two match halves into the §9.2 bonus_game report"
+    )
+    pr.add_argument("half_a", help="path to one peer_half_*.json (group 1 or 2)")
+    pr.add_argument("half_b", help="path to the other peer_half_*.json")
+    pr.add_argument("--config", default=None, help="path to config.yaml (for output_dir)")
     return parser.parse_args(argv)
 
 
@@ -61,12 +82,95 @@ def _print_summary(series, totals) -> None:
     print(f"Totals: cop={totals['cop']} thief={totals['thief']}")
 
 
+def _run_peer_match(args) -> int:
+    """Referee our 3 cop sub-games against the opponent's thief server (MATCH_PROTOCOL §D)."""
+    import json
+    from datetime import UTC, datetime
+
+    from .orchestrator.peer_series import PeerSeriesRunner
+
+    config = Config.load(args.config)
+    if args.provider:
+        config.raw["llm"]["provider"] = args.provider
+    llm = build_llm(config.llm)
+    start_index = 1 if args.group == "1" else 4
+    print(
+        f"Refereeing our cop half as Group {args.group} "
+        f"(sub-games {start_index}-{start_index + args.num_games - 1}) "
+        f"vs opponent thief {args.peer_thief_url}"
+    )
+    series = PeerSeriesRunner(
+        config,
+        peer_thief_url=args.peer_thief_url,
+        peer_token=args.token,
+        llm=llm,
+        log=not args.no_log,
+        num_games=args.num_games,
+        start_index=start_index,
+    ).run()
+    _print_summary(series, series.totals)
+    # Persist our authoritative half so the two halves can be merged for the §9.2 report.
+    out_dir = Path(config.report["output_dir"])
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    path = out_dir / f"peer_half_group{args.group}_{stamp}.json"
+    team = config.team
+    half = {
+        "group_name": team["group_name"],
+        "role": "cop",
+        "group": args.group,
+        "protocol": "0.1",
+        "github_repo": team["github_repo"],
+        "students": list(team.get("students", [])),
+        "cop_mcp_url": team["cop_mcp_url"],
+        "thief_mcp_url": team["thief_mcp_url"],
+        "timezone": team["timezone"],
+        "sub_games": [
+            {
+                "sub_game": s.sub_game,
+                "result": s.result,
+                "reason": s.reason,
+                "moves": s.moves,
+                "score": s.score,
+                "start": s.start,
+                "barriers": s.barriers,
+            }
+            for s in series.sub_games
+        ],
+        "totals": series.totals,
+    }
+    path.write_text(json.dumps(half, indent=2), encoding="utf-8")
+    print(f"Half record written to {path}")
+    return 0
+
+
+def _run_peer_report(args) -> int:
+    """Merge our half + the opponent's half into the §9.2 matched bonus_game report."""
+    import json
+
+    from .orchestrator.report_builder import build_bonus_from_halves, write_report
+
+    config = Config.load(args.config)
+    half_a = json.loads(Path(args.half_a).read_text(encoding="utf-8"))
+    half_b = json.loads(Path(args.half_b).read_text(encoding="utf-8"))
+    report = build_bonus_from_halves(half_a, half_b)
+    path = write_report(report, config.report["output_dir"])
+    totals = report["totals_by_group"]
+    print("Bonus game (§9.2) merged:")
+    for name, total in totals.items():
+        print(f"  {name}: total={total}  bonus={report['bonus_claim'][name]}")
+    print(f"Report written to {path}")
+    print("Both teams must email byte-identical JSON or the bonus voids (§12.2).")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the CLI; returns a process exit code."""
     import sys
 
     raw = list(sys.argv[1:] if argv is None else argv)
-    if not raw or raw[0] not in {"run", "peer-check"}:  # default to the `run` subcommand
+    _commands = {"run", "peer-check", "peer-match", "peer-report"}
+    if not raw or raw[0] not in _commands:  # default to the `run` subcommand
         raw = ["run", *raw]
     args = _parse_args(raw)
     _load_dotenv()
@@ -78,6 +182,10 @@ def main(argv: list[str] | None = None) -> int:
         result = peer_check(args.url, args.token)
         print(json.dumps(result, indent=2))
         return 0 if result.get("reachable") else 1
+    if args.command == "peer-match":
+        return _run_peer_match(args)
+    if args.command == "peer-report":
+        return _run_peer_report(args)
     config = Config.load(args.config)
     if args.provider:
         config.raw["llm"]["provider"] = args.provider

@@ -74,6 +74,49 @@ def build_bonus_report(
     }
 
 
+def build_bonus_from_halves(half_a: dict, half_b: dict) -> dict:
+    """Merge two self-describing match halves into the §9.2 ``bonus_game`` report.
+
+    Each half is what ``cop-thief peer-match`` writes: the refereeing team's full
+    identity plus its 3 cop sub-games (``score`` is ``{"cop", "thief"}`` per
+    sub-game, where ``cop`` is that refereeing group and ``thief`` is the opponent).
+    Requires exactly one ``group == "1"`` half and one ``group == "2"`` half. Both
+    teams run this on the same two halves and must get byte-identical JSON (§9.2),
+    so every field here is deterministic.
+    """
+    by_group = {str(h.get("group")): h for h in (half_a, half_b)}
+    if set(by_group) != {"1", "2"}:
+        raise ValueError("need exactly one group-1 half and one group-2 half")
+    g1, g2 = by_group["1"], by_group["2"]
+    name1, name2 = g1["group_name"], g2["group_name"]
+
+    totals_by_group = {name1: 0, name2: 0}
+    for sub in g1["sub_games"]:  # g1 refereed as cop
+        totals_by_group[name1] += sub["score"]["cop"]
+        totals_by_group[name2] += sub["score"]["thief"]
+    for sub in g2["sub_games"]:  # g2 refereed as cop
+        totals_by_group[name2] += sub["score"]["cop"]
+        totals_by_group[name1] += sub["score"]["thief"]
+
+    sub_games = sorted(
+        [*g1["sub_games"], *g2["sub_games"]], key=lambda s: int(s["sub_game"])
+    )
+    return build_bonus_report(
+        groups={"group_1": name1, "group_2": name2},
+        repos={"group_1": g1["github_repo"], "group_2": g2["github_repo"]},
+        mcp_urls={
+            "group_1_cop": g1["cop_mcp_url"],
+            "group_1_thief": g1["thief_mcp_url"],
+            "group_2_cop": g2["cop_mcp_url"],
+            "group_2_thief": g2["thief_mcp_url"],
+        },
+        students={"group_1": list(g1["students"]), "group_2": list(g2["students"])},
+        sub_games=sub_games,
+        totals_by_group=totals_by_group,
+        timezone_name=g1.get("timezone", "Asia/Jerusalem"),
+    )
+
+
 def write_report(report: dict, output_dir: str | Path) -> Path:
     """Write ``report`` to a timestamped JSON file and return its path."""
     directory = Path(output_dir)
