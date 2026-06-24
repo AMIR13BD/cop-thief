@@ -70,6 +70,17 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     pr.add_argument("half_a", help="path to one peer_half_*.json (group 1 or 2)")
     pr.add_argument("half_b", help="path to the other peer_half_*.json")
     pr.add_argument("--config", default=None, help="path to config.yaml (for output_dir)")
+    mt = sub.add_parser(
+        "match", help="drive our side of the inter-group lockstep match (docs/MATCH_PEER.md)"
+    )
+    mt.add_argument("--config", default=None, help="path to config.yaml")
+    mt.add_argument(
+        "--provider", choices=["heuristic", "anthropic", "openai"], help="override llm.provider"
+    )
+    mt.add_argument("--no-log", action="store_true", help="do not write the JSONL turn log")
+    mt.add_argument(
+        "--poll-interval", type=float, default=1.0, help="status poll seconds (default 1.0)"
+    )
     return parser.parse_args(argv)
 
 
@@ -84,9 +95,6 @@ def _print_summary(series, totals) -> None:
 
 def _run_peer_match(args) -> int:
     """Referee our 3 cop sub-games against the opponent's thief server (MATCH_PROTOCOL §D)."""
-    import json
-    from datetime import UTC, datetime
-
     from .orchestrator.peer_series import PeerSeriesRunner
 
     config = Config.load(args.config)
@@ -109,17 +117,25 @@ def _run_peer_match(args) -> int:
         start_index=start_index,
     ).run()
     _print_summary(series, series.totals)
-    # Persist our authoritative half so the two halves can be merged for the §9.2 report.
+    path = _write_half(config, args.group, series)
+    print(f"Half record written to {path}")
+    return 0
+
+
+def _write_half(config, group: str, series) -> Path:
+    """Persist our authoritative half (self-describing) for the §9.2 merge step."""
+    import json
+    from datetime import UTC, datetime
+
     out_dir = Path(config.report["output_dir"])
     out_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    path = out_dir / f"peer_half_group{args.group}_{stamp}.json"
+    path = out_dir / f"peer_half_group{group}_{stamp}.json"
     team = config.team
     half = {
         "group_name": team["group_name"],
         "role": "cop",
-        "group": args.group,
-        "protocol": "0.1",
+        "group": group,
         "github_repo": team["github_repo"],
         "students": list(team.get("students", [])),
         "cop_mcp_url": team["cop_mcp_url"],
@@ -127,20 +143,48 @@ def _run_peer_match(args) -> int:
         "timezone": team["timezone"],
         "sub_games": [
             {
-                "sub_game": s.sub_game,
-                "result": s.result,
-                "reason": s.reason,
-                "moves": s.moves,
-                "score": s.score,
-                "start": s.start,
-                "barriers": s.barriers,
+                "sub_game": s.sub_game, "result": s.result, "reason": s.reason,
+                "moves": s.moves, "score": s.score, "start": s.start, "barriers": s.barriers,
             }
             for s in series.sub_games
         ],
         "totals": series.totals,
     }
     path.write_text(json.dumps(half, indent=2), encoding="utf-8")
-    print(f"Half record written to {path}")
+    return path
+
+
+def _run_match(args) -> int:
+    """Drive our side of the inter-group lockstep match; record our cop half (4–6)."""
+    import os
+
+    from .orchestrator.match_driver import MatchDriver
+
+    config = Config.load(args.config)
+    if args.provider:
+        config.raw["llm"]["provider"] = args.provider
+    llm = build_llm(config.llm)
+
+    def need(var: str) -> str:
+        val = os.getenv(var)
+        if not val:
+            raise SystemExit(f"missing env var {var} (opponent endpoint — see .env)")
+        return val
+
+    print("Driving inter-group match as group_2 (thief in 1-3, cop in 4-6)...")
+    series = MatchDriver(
+        config,
+        peer_cop_url=need("PEER_COP_MCP_URL"),
+        peer_thief_url=need("PEER_THIEF_MCP_URL"),
+        peer_cop_token=need("PEER_COP_TOKEN"),
+        peer_thief_token=need("PEER_THIEF_TOKEN"),
+        llm=llm,
+        log=not args.no_log,
+        poll_interval=args.poll_interval,
+    ).run()
+    _print_summary(series, series.totals)
+    path = _write_half(config, "2", series)
+    print(f"Our cop half (sub-games 4-6) written to {path}")
     return 0
 
 
@@ -169,7 +213,7 @@ def main(argv: list[str] | None = None) -> int:
     import sys
 
     raw = list(sys.argv[1:] if argv is None else argv)
-    _commands = {"run", "peer-check", "peer-match", "peer-report"}
+    _commands = {"run", "peer-check", "peer-match", "peer-report", "match"}
     if not raw or raw[0] not in _commands:  # default to the `run` subcommand
         raw = ["run", *raw]
     args = _parse_args(raw)
@@ -186,6 +230,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run_peer_match(args)
     if args.command == "peer-report":
         return _run_peer_report(args)
+    if args.command == "match":
+        return _run_match(args)
     config = Config.load(args.config)
     if args.provider:
         config.raw["llm"]["provider"] = args.provider
