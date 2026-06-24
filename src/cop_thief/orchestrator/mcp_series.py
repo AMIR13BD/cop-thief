@@ -29,7 +29,7 @@ from collections.abc import Callable
 from ..agents.cop_agent import build_cop_agent
 from ..agents.thief_agent import build_thief_agent
 from ..config import Config
-from ..game.actions import Role, TurnPayload
+from ..game.actions import Role, TurnPayload, round_number
 from ..game.scoring import accumulate, score_subgame
 from ..game.setup import new_subgame
 from ..security.tokens import resolve_expected_token
@@ -152,7 +152,7 @@ class MCPSeriesRunner:
                 {"claim": state.position_of(role.opponent).to_list()},
             )
             # The orchestrator's referee is the single authority on the result.
-            record = ref.submit(TurnPayload(index, ply, role, message, action))
+            record = ref.submit(TurnPayload(index, round_number(ply), role, message, action))
             if self.writer:
                 self.writer.turn(record)
         return self._summarise(index, ref, start)

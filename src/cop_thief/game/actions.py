@@ -36,6 +36,17 @@ class ActionType(StrEnum):
     BARRIER = "barrier"
 
 
+def round_number(ply: int) -> int:
+    """Assignment-level move number for a 1-based action index ``ply`` (§2.8).
+
+    Turns alternate thief→cop, so the thief's k-th move and the cop's reply share
+    round ``k`` (plies ``2k-1`` and ``2k``). This is the ``move_number`` that goes
+    into the turn payload, log, and report — it never exceeds ``max_moves`` (unlike
+    the raw per-action ``ply``, which runs up to ``2 * max_moves``).
+    """
+    return (ply + 1) // 2
+
+
 @dataclass(frozen=True)
 class Action:
     """A structured action: a move to ``to`` or a barrier dropped on ``to``."""

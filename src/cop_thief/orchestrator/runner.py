@@ -12,7 +12,7 @@ import random
 from ..agents.cop_agent import build_cop_agent
 from ..agents.thief_agent import build_thief_agent
 from ..config import Config
-from ..game.actions import Role, TurnPayload
+from ..game.actions import Role, TurnPayload, round_number
 from ..game.scoring import accumulate, score_subgame
 from ..game.setup import new_subgame
 from .referee import SubGameReferee
@@ -58,7 +58,7 @@ class SeriesRunner:
             ply += 1
             observation = ref.observe(role)
             message, action = agents[role].decide(observation, outbox[role.opponent][-2:])
-            record = ref.submit(TurnPayload(index, ply, role, message, action))
+            record = ref.submit(TurnPayload(index, round_number(ply), role, message, action))
             outbox[role].append(message)
             if self.writer:
                 self.writer.turn(record)

@@ -13,7 +13,7 @@ from collections.abc import Iterator
 from ..agents.cop_agent import build_cop_agent
 from ..agents.thief_agent import build_thief_agent
 from ..config import Config
-from ..game.actions import Role, TurnPayload
+from ..game.actions import Role, TurnPayload, round_number
 from ..game.scoring import accumulate, score_subgame
 from ..game.setup import GameParams, new_subgame
 from ..orchestrator.referee import SubGameReferee
@@ -24,7 +24,9 @@ def _snapshot(index, ply, role, message, action, ref, totals, params, *, score=N
     state = ref.state
     return {
         "sub_game": index,
-        "ply": ply,
+        "ply": ply,                          # raw per-action index (1..2*max_moves)
+        "move_number": state.move_number,    # assignment-level move (0..max_moves)
+        "max_moves": state.max_moves,
         "role": role.value if role else None,
         "message": message,
         "action": action.to_dict() if action else None,
@@ -59,7 +61,7 @@ def iter_series(config: Config, llm=None) -> Iterator[dict]:
             role = ref.whose_turn()
             ply += 1
             message, action = agents[role].decide(ref.observe(role), outbox[role.opponent][-2:])
-            ref.submit(TurnPayload(index, ply, role, message, action))
+            ref.submit(TurnPayload(index, round_number(ply), role, message, action))
             outbox[role].append(message)
             yield _snapshot(index, ply, role, message, action, ref, totals, params)
         score = score_subgame(ref.state.result, table)

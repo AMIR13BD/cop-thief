@@ -1,7 +1,7 @@
 """End-to-end engine behaviour: capture, turn order, survival, move counting."""
 
 from _helpers import barrier, build_engine, move
-from cop_thief.game.actions import Role
+from cop_thief.game.actions import Role, round_number
 from cop_thief.game.state import SubGameResult
 
 
@@ -51,6 +51,30 @@ def test_cop_last_reply_can_still_capture():
     eng.step(move(Role.THIEF, (4, 3)))  # thief's final move, lands next to cop
     eng.step(move(Role.COP, (4, 3)))    # cop's last chance: capture
     assert eng.state.result is SubGameResult.COP_WIN
+
+
+def test_subgame_ends_exactly_at_max_moves_with_thief_win():
+    # No capture ever happens; the sub-game must stop the moment the thief completes
+    # its max_moves-th move, and move_number must never run past max_moves.
+    eng = build_engine(cop=(0, 0), thief=(4, 4), max_moves=3)
+    thief_to = {(4, 4): (4, 3), (4, 3): (4, 4)}
+    cop_to = {(0, 0): (0, 1), (0, 1): (0, 0)}
+    while eng.state.result is SubGameResult.IN_PROGRESS:
+        if eng.state.to_move is Role.THIEF:
+            eng.step(move(Role.THIEF, thief_to[tuple(eng.state.thief.to_list())]))
+        else:
+            eng.step(move(Role.COP, cop_to[tuple(eng.state.cop.to_list())]))
+        assert eng.state.move_number <= eng.state.max_moves  # never exceeds the cap
+    assert eng.state.result is SubGameResult.THIEF_WIN
+    assert eng.state.reason == "survived"
+    assert eng.state.move_number == 3
+
+
+def test_round_number_maps_actions_to_assignment_moves():
+    # Plies 1..6 are thief/cop/thief/cop... -> assignment moves 1,1,2,2,3,3.
+    assert [round_number(p) for p in range(1, 7)] == [1, 1, 2, 2, 3, 3]
+    # The very last action of a full 25-move sub-game is still move 25, not 50.
+    assert round_number(2 * 25) == 25
 
 
 def test_record_snapshots_positions_and_barriers():

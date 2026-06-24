@@ -84,7 +84,11 @@ class GuiApp:
             tail = f" · {snap['result']} ({snap['reason']})"
         else:
             tail = f" · to move: {snap['to_move']}"
-        head = f"Sub-game {snap['sub_game']}/{self.num_games} · move {snap['ply']}"
+        head = (
+            f"Sub-game {snap['sub_game']}/{self.num_games}"
+            f" · move {snap['move_number']}/{snap['max_moves']}"
+            f" · action {snap['ply']}"
+        )
         self.status.config(text=head + tail)
         self.barriers.config(
             text=f"Cop barriers left: {snap['barriers_remaining']}/{self.max_barriers}"

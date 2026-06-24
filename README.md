@@ -386,7 +386,7 @@ A turn from the JSONL log showing the **bluff channel** (the message says
 "south" while the action moves north-west — the result follows the action):
 
 ```json
-{"event":"turn","timestamp":"2026-06-22T10:20:19Z","sub_game":1,"move_number":3,
+{"event":"turn","timestamp":"2026-06-22T10:20:19Z","sub_game":1,"move_number":2,
  "role":"thief","message":"Breaking south — try to keep up.",
  "action":{"type":"move","to":[0,2]},"legal":true,"validation":"ok",
  "cop":[3,1],"thief":[0,2],"barriers":[],"result":"in_progress"}
@@ -396,11 +396,17 @@ And a **cop placing a barrier** on an adjacent cell (it does not move that turn,
 and the new barrier shows up in the turn's `barriers` list):
 
 ```json
-{"event":"turn","timestamp":"2026-06-24T06:26:49Z","sub_game":2,"move_number":2,
+{"event":"turn","timestamp":"2026-06-24T07:18:15Z","sub_game":2,"move_number":1,
  "role":"cop","message":"Sealing this corridor — you won't get through here.",
  "action":{"type":"barrier","to":[1,1]},"legal":true,"validation":"ok",
  "cop":[0,0],"thief":[2,2],"barriers":[[1,1]],"result":"in_progress"}
 ```
+
+> **Move counting.** `move_number` is the **assignment-level move** (§2.8): the
+> thief's k-th move and the cop's reply to it share move `k`, so it runs `1..25`
+> and never exceeds `max_moves`. The GUI additionally shows a raw **action** index
+> (`1..50`) for step-by-step transparency — that larger number is *not* the
+> assignment move.
 
 Put GUI/CLI screenshots under `results/screenshots/` for the cloud run.
 
