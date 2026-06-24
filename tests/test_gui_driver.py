@@ -3,7 +3,10 @@
 from cop_thief.config import Config
 from cop_thief.gui.driver import iter_series
 
-_REQUIRED = {"sub_game", "ply", "cop", "thief", "barriers", "grid", "result", "totals", "message"}
+_REQUIRED = {
+    "sub_game", "ply", "move_number", "max_moves", "cop", "thief",
+    "barriers", "grid", "result", "totals", "message",
+}
 
 
 def _short(num_games: int = 2) -> Config:
@@ -23,6 +26,17 @@ def test_each_subgame_emits_one_scored_end_snapshot():
     ends = [s for s in iter_series(_short(2)) if s["score"] is not None]
     assert len(ends) == 2
     assert all(s["result"] in {"cop_win", "thief_win"} for s in ends)
+
+
+def test_displayed_move_never_exceeds_max_moves():
+    snaps = list(iter_series(_short(3)))
+    assert snaps
+    for s in snaps:
+        assert s["max_moves"] == 25  # single source of truth from config
+        assert 0 <= s["move_number"] <= s["max_moves"]  # assignment move stays in range
+    # The raw per-action index ("action") is a distinct, larger counter than the
+    # assignment move — this is exactly what the GUI now labels separately.
+    assert any(s["ply"] > s["move_number"] for s in snaps)
 
 
 def test_totals_are_non_decreasing_and_final_is_positive():

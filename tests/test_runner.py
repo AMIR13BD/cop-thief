@@ -34,6 +34,14 @@ def test_totals_equal_sum_of_subgame_scores():
     assert series.totals == expected
 
 
+def test_subgame_length_is_consistent_with_max_moves():
+    config = _short_config(6)
+    series = SeriesRunner(config, llm=None, log=False).run()
+    max_moves = config.game_params().max_moves
+    for summary in series.sub_games:
+        assert 0 < summary.moves <= max_moves  # report length never exceeds the cap
+
+
 def test_run_is_reproducible_with_fixed_seed():
     a = SeriesRunner(_short_config(3), llm=None, log=False).run()
     b = SeriesRunner(_short_config(3), llm=None, log=False).run()
