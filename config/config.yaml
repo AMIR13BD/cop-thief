@@ -22,10 +22,22 @@ observation:
   start_outside_vision: true   # place start cells beyond each other's vision radius
 
 # Heuristic-agent tuning (offline demo policy; strategy quality is not graded, §3).
-# These shape WHEN the cop spends a turn placing a barrier instead of chasing.
+# All weights are read here — nothing is hard-coded in the policy logic.
 strategy:
-  cop_barrier_prob: 0.65   # per-turn chance the cop walls a flight lane when one helps (0 = never)
-  cop_barrier_min_gap: 2   # only consider a barrier when the visible thief is >= this far away
+  # Thief — how each candidate escape cell is scored.
+  thief_escape_weight: 3.0            # reward barrier-aware shortest-path distance from the cop
+  thief_future_mobility_weight: 1.0   # reward cells with more exits (avoid dead-ends)
+  thief_corner_penalty: 1.5           # punish hugging walls/corners while the cop is near
+  thief_lookahead_weight: 2.0         # reward safety after the cop's best single reply
+  thief_memory_decay: 6               # turns before a last-seen cop is forgotten (memory decay)
+  thief_random_tie_break: 0.12        # break only near-ties randomly (0 = fully deterministic)
+  # Cop — when a barrier is worth a turn instead of chasing. On the small 5x5 board
+  # a competent pursuer would otherwise catch the thief almost every game, so the cop
+  # uses tactical barriers (always on one of the thief's own escape cells, value-gated)
+  # to herd it — which is also what gives the thief a believable chance to escape.
+  cop_barrier_min_value: 1.0          # min simulated tactical value before placing a barrier
+  cop_barrier_max_probability: 0.7    # cap on how often a *useful* barrier is taken (anti-spam)
+  cop_barrier_min_gap: 2              # only consider a barrier when the visible thief is >= this far
 
 referee:
   # Single authoritative state owner. For internal games this engine is always referee.

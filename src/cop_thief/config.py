@@ -44,8 +44,7 @@ class Config:
             eight_directional=int(game["movement_directions"]) == 8,
             vision_radius=int(obs["vision_radius"]),
             start_outside_vision=bool(obs["start_outside_vision"]),
-            cop_barrier_prob=float(strat.get("cop_barrier_prob", 0.5)),
-            cop_barrier_min_gap=int(strat.get("cop_barrier_min_gap", 2)),
+            strategy=dict(strat),
         )
 
     def scoring_table(self) -> ScoringTable:

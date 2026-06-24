@@ -107,8 +107,23 @@ entrypoints over an orchestration layer, over the authoritative game core.
   construction. Pure Python, fully unit-tested, no I/O.
 - **Agents** (`agents/`) turn a partial observation (+ the opponent's recent
   messages) into a `(message, action)`. An LLM does the reasoning when
-  configured; otherwise a deterministic heuristic does. Either way the agent
-  **sanitises** its action so a malformed reply degrades to a safe legal move.
+  configured; otherwise an **intelligent heuristic** does (see below). Either way
+  the agent **sanitises** its action so a malformed reply degrades to a safe move.
+
+  The offline heuristics are built to *look like real agents*, scoring every legal
+  move rather than moving at random (all weights live in `config.yaml`'s
+  `strategy` block; `agents/geometry.py` provides barrier-aware BFS distances):
+  - **Thief** (`agents/thief_policy.py`) scores each escape cell by immediate
+    safety (never a cell the cop could capture next turn if a safer one exists),
+    barrier-aware distance from the cop, future mobility (avoid dead-ends),
+    corner/trap avoidance when the cop is near, breaking line of sight, and a
+    one-step **lookahead** (how safe the cell still is after the cop's best reply).
+    Out of sight it uses a *decaying memory* of where the cop was last seen — never
+    the hidden true cell.
+  - **Cop** (`agents/cop_policy.py`) captures when it can, otherwise chases on the
+    BFS shortest path around barriers (last-seen memory / patrol when blind). It
+    places a barrier only when a *simulated* candidate on the thief's own escape
+    lane clears `cop_barrier_min_value` — never randomly, never every turn.
 - **Orchestrator** (`orchestrator/`) runs the series, owns the **referee** (the
   single authoritative state), threads messages between agents, logs every turn,
   builds the report, and emails it.
@@ -346,11 +361,12 @@ uv run ruff check src tests                     # lint (zero warnings)
 ```
 
 Tests cover movement, barriers (placement, blocking, budget decrease/reset),
-capture/engine, scoring, partial observation, the heuristic policies (cop barrier
-placement, thief evasion + last-seen memory, no hidden-opponent leak), a balance
+capture/engine, scoring, partial observation, barrier-aware geometry (BFS around
+walls), the heuristic policies (thief immediate-safety / mobility / last-seen
+memory / lookahead, value-gated cop barriers, no hidden-opponent leak), a balance
 sanity guard, illegal actions, start positions, agent sanitisation/fallback, the
-report schemas, doc hygiene, and the CLI — **92 tests, ~94 % coverage**
-(target ≥ 85 %). The core game logic is at 100 %.
+report schemas, doc hygiene, and the CLI — **97 tests, ~95 % coverage**
+(target ≥ 85 %). The core game logic and geometry are at 100 %.
 
 ## 15. Security notes
 
@@ -418,7 +434,8 @@ cop-thief/
   docs/                       PRD, PLAN, TODO, ARCHITECTURE, PROMPTS, REPORT_SCHEMA
   src/cop_thief/
     game/                     board, actions, state, observation, scoring, engine, setup
-    agents/                   base/cop/thief agents, strategies, messages
+    agents/                   base/cop/thief agents, geometry, tuning,
+                              thief_policy, cop_policy, strategies, messages
     gui/                      Tkinter replay: driver, board_view, app
     mcp_servers/              cop_server, thief_server, shared server_app
     orchestrator/             runner, referee, llm_client, prompts, results,

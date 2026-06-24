@@ -8,7 +8,7 @@ grid allows, begin beyond each other's vision radius (§2.9).
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .board import Board, Position, chebyshev_distance
 from .state import GameState
@@ -26,8 +26,7 @@ class GameParams:
     eight_directional: bool
     vision_radius: int
     start_outside_vision: bool
-    cop_barrier_prob: float = 0.5
-    cop_barrier_min_gap: int = 2
+    strategy: dict = field(default_factory=dict)  # heuristic tuning (config 'strategy' block)
 
 
 def _draw_start(params: GameParams, rng: random.Random) -> tuple[Position, Position]:
