@@ -4,8 +4,14 @@ Homework 6, *AI Agent Orchestration* (Dr. Yoram Segal). A complete end-to-end
 pipeline in which two autonomous AI agents — a **Cop** and a **Thief** — play a
 partially observable chase on a grid, **communicate in free natural language**,
 and are driven through **two separate MCP servers** by an orchestrator that runs
-a full 6-sub-game series and emails a JSON report — with **no manual
+a full 6-sub-game series and **writes a JSON report to disk** — with **no manual
 intervention** from start to final report.
+
+> **Scope.** This repository delivers the **local section**: the full game,
+> partial observability, barriers, the two local MCP servers, the orchestrator
+> that drives the series through them, and the JSON report written under
+> `results/reports/`. **Gmail delivery and cloud (HTTPS-tunnel) deployment are
+> scaffolded but deferred — they are not part of the completed local section.**
 
 > The graded value of this project is the **orchestration and communication**
 > infrastructure, not the cleverness of the chase strategy (assignment §3, §14).
@@ -43,7 +49,9 @@ Each agent sees only what is inside its **vision radius**; beyond it, it must
 reason from the opponent's **natural-language messages**, which may be bluffs.
 A central **orchestrator (the MCP client)** holds the LLM, drives the
 conversation, and asks the authoritative **referee** to validate every action.
-After 6 clean sub-games it builds a JSON report and emails it via the Gmail API.
+After 6 clean sub-games it builds a JSON report and writes it to
+`results/reports/`. (Emailing that report via the Gmail API is scaffolded in
+`orchestrator/gmail_sender.py` but **deferred** — see §13.)
 
 The whole pipeline **runs offline and deterministically** out of the box: with
 no API key it uses a built-in heuristic policy, so the game, logging, and report
@@ -56,7 +64,7 @@ the same agents are driven by an LLM instead.
 |---|---|
 | 5×5 grid from config, `[row,col]`, 8-directional | `config/config.yaml`, `game/board.py` |
 | 6 sub-games × ≤25 thief moves, thief first | `game/engine.py`, `orchestrator/runner.py` |
-| Barriers: cop-only, on own cell, ≤5, impassable, illegal entry loses | `game/engine.py` |
+| Barriers: cop-only, on an adjacent empty cell, ≤5, impassable, illegal entry loses | `game/engine.py` |
 | Capture = same cell, checked after every move, no swap-capture | `game/engine.py` |
 | Partial observability, vision radius 2 (Chebyshev) | `game/observation.py` |
 | Scoring 20/5 and 5/10 | `game/scoring.py` |
@@ -201,13 +209,13 @@ Each turn carries two things (SHARED_MATCH_RULES.md §2.2):
   cannot place barriers. If no valid neighbour exists, the barrier action is
   unavailable that turn. **Stepping into a barrier loses** the sub-game.
 
-  > **Documented design decision — deliberate deviation from assignment §4.3.**
-  > The assignment specifies the barrier is placed on the cop's **own current
-  > cell**. This project instead places it on an **adjacent empty cell**, a team
-  > design choice that makes the barrier a usable tool for cutting off the thief's
-  > escape routes rather than only the cell the cop is leaving. This is a conscious
-  > deviation from the literal spec (not an oversight) and is to be confirmed with
-  > the TA. The validation lives in `game/engine.py::_validate_barrier`.
+  > **Documented design decision — deviation from assignment §4.3, lecturer-confirmed.**
+  > The assignment text specifies the barrier is placed on the cop's **own current
+  > cell**. This project instead places it on an **adjacent empty cell**, which the
+  > lecturer confirmed, so the barrier is a usable tool for cutting off the thief's
+  > escape routes rather than only the cell the cop is leaving. The rule is stated
+  > in [`docs/SHARED_MATCH_RULES.md` §2.4](docs/SHARED_MATCH_RULES.md) and validated
+  > in `game/engine.py::_validate_barrier`.
 - **Capture**: cop and thief on the **same cell**, checked after every move. A
   pass-through swap is not a capture (turns are sequential, so this is automatic).
 - **Win**: cop wins on capture; thief wins by surviving.
@@ -313,6 +321,11 @@ read from `config.yaml`.
 
 ## 13. How Gmail reporting works
 
+> **Deferred — not part of the completed local section.** The local pipeline
+> **writes the JSON report to `results/reports/`**; it does not email anything by
+> default. The Gmail path below is scaffolded in `orchestrator/gmail_sender.py`
+> and only runs when you pass `--email` after completing the one-time OAuth setup.
+
 Following the course Google API guide:
 
 1. In Google Cloud Console create an **OAuth client ID** of type **Desktop app**,
@@ -332,10 +345,12 @@ uv run pytest --cov=cop_thief --cov-report=term-missing   # with coverage
 uv run ruff check src tests                     # lint (zero warnings)
 ```
 
-Tests cover movement, barriers, capture/engine, scoring, partial observation,
-illegal actions, start positions, agent sanitisation/fallback, the report
-schemas, and the CLI — **66 tests, ~94 % coverage** (target ≥ 85 %). The core
-game logic is at 100 %.
+Tests cover movement, barriers (placement, blocking, budget decrease/reset),
+capture/engine, scoring, partial observation, the heuristic policies (cop barrier
+placement, thief evasion + last-seen memory, no hidden-opponent leak), a balance
+sanity guard, illegal actions, start positions, agent sanitisation/fallback, the
+report schemas, doc hygiene, and the CLI — **92 tests, ~94 % coverage**
+(target ≥ 85 %). The core game logic is at 100 %.
 
 ## 15. Security notes
 
@@ -353,14 +368,18 @@ game logic is at 100 %.
 
 ## 16. Evidence: log & run examples
 
-Console output of a full offline series (deterministic, seed 42):
+Console output of a full offline series (deterministic, seed 42) — the cop and
+thief each win some sub-games, and the cop spends barriers along the way:
 
 ```
-  sub-game 1: cop_win   (capture) in 4 moves -> {'cop': 20, 'thief': 5}
-  ...
-  sub-game 6: cop_win   (capture) in 3 moves -> {'cop': 20, 'thief': 5}
-Totals: cop=120 thief=30
-Report written to results/reports/report_20260622T102019Z.json
+  sub-game 1: cop_win   (capture)  in 3 moves  -> {'cop': 20, 'thief': 5}
+  sub-game 2: cop_win   (capture)  in 5 moves  -> {'cop': 20, 'thief': 5}
+  sub-game 3: cop_win   (capture)  in 2 moves  -> {'cop': 20, 'thief': 5}
+  sub-game 4: thief_win (survived) in 25 moves -> {'cop': 5, 'thief': 10}
+  sub-game 5: thief_win (survived) in 25 moves -> {'cop': 5, 'thief': 10}
+  sub-game 6: thief_win (survived) in 25 moves -> {'cop': 5, 'thief': 10}
+Totals: cop=75 thief=45
+Report written to results/reports/report_20260624T062649Z.json
 ```
 
 A turn from the JSONL log showing the **bluff channel** (the message says
@@ -371,6 +390,16 @@ A turn from the JSONL log showing the **bluff channel** (the message says
  "role":"thief","message":"Breaking south — try to keep up.",
  "action":{"type":"move","to":[0,2]},"legal":true,"validation":"ok",
  "cop":[3,1],"thief":[0,2],"barriers":[],"result":"in_progress"}
+```
+
+And a **cop placing a barrier** on an adjacent cell (it does not move that turn,
+and the new barrier shows up in the turn's `barriers` list):
+
+```json
+{"event":"turn","timestamp":"2026-06-24T06:26:49Z","sub_game":2,"move_number":2,
+ "role":"cop","message":"Sealing this corridor — you won't get through here.",
+ "action":{"type":"barrier","to":[1,1]},"legal":true,"validation":"ok",
+ "cop":[0,0],"thief":[2,2],"barriers":[[1,1]],"result":"in_progress"}
 ```
 
 Put GUI/CLI screenshots under `results/screenshots/` for the cloud run.
