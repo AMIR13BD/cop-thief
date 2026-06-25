@@ -99,27 +99,83 @@ the same agents are driven by an LLM instead.
 ## 3. Architecture
 
 A layered design (per the software-guidelines SDK/layered model): thin
-entrypoints over an orchestration layer, over the authoritative game core.
+entrypoints over an orchestration layer, over the authoritative game core. The
+same core runs in **two deployment modes** — a local/offline single-team series,
+and the deployed cloud setup used for the inter-group bonus match.
+
+### Diagram A — Local / offline architecture
 
 ```
-            ┌───────────────────────────── Orchestrator (MCP client) ─────────────────────────────┐
- CLI  ─────▶│  runner → builds observation → asks Agent for (message, action) → referee validates  │
- (main.py)  │     │                              │                                   │             │
-            │     │                         llm_client (Claude)  ── or ──  heuristic strategy        │
-            │     ▼                                                                  ▼              │
-            │  report_builder → gmail_sender                                    JSONL turn log       │
-            └───────────────────────────────────────┬──────────────────────────────────────────────┘
-                                                     │ single source of truth
-                                          ┌──────────▼──────────┐
-                                          │  Referee (engine)   │  rules, capture, scoring
-                                          │  game/ board state  │
-                                          └──────────┬──────────┘
-                  exposed over HTTPS as tools         │
-            ┌──────────────────────┐         ┌────────▼─────────┐
-            │  Cop MCP server      │         │ Thief MCP server │   observe() / submit_turn()
-            │  (FastMCP, :8101)    │         │ (FastMCP, :8102) │   guarded by bearer token
-            └──────────────────────┘         └──────────────────┘
+   ┌─────────────┐
+   │  CLI / GUI  │   cop-thief run  ·  cop-thief-gui
+   └──────┬──────┘
+          ▼
+ ┌────────────────────── Orchestrator (the MCP client) ──────────────────────┐
+ │  runner → build observation → Agent decides (LLM or heuristic)            │
+ │  → (message, action).  Owns the decision flow; threads NL messages;       │
+ │  writes the JSONL turn log.                                               │
+ └───────────────┬───────────────────────────────────────────┬──────────────┘
+                 │ validate & apply (single source of truth)  │
+                 ▼                                             ▼
+      ┌────────────────────┐                       ┌──────────────────────────┐
+      │ Referee / game core│  rules, capture,      │ report_builder           │
+      │   (AUTHORITATIVE)  │  scoring              │  → results/reports/*.json │
+      └─────────┬──────────┘                       └──────────────────────────┘
+                │ exposed locally as MCP tools (observe / submit_turn), bearer-guarded
+      ┌─────────┴──────────┐          ┌─────────────────────┐
+      │ Cop MCP server     │          │ Thief MCP server    │   FastMCP on 127.0.0.1
+      │   (:8101)          │          │   (:8102)           │   (`run --mcp` drives via these)
+      └────────────────────┘          └─────────────────────┘
 ```
+
+- The **orchestrator (the MCP client) owns the decision flow**: each turn it
+  builds the partial observation, asks the agent (LLM or offline heuristic) for a
+  `(message, action)`, and threads the opponent's last message in.
+- The **Referee / game core is authoritative** — it validates every action and
+  decides capture/score; agents never mutate state directly.
+- With `--mcp`, the same turns flow through the **two local FastMCP servers**
+  (cop `:8101`, thief `:8102`) over bearer-guarded `observe` / `submit_turn`.
+- After 6 sub-games, `report_builder` writes the **§9.1 JSON report** to
+  `results/reports/` — fully offline, no network or API key required.
+
+### Diagram B — Online / cloud / bonus architecture
+
+```
+   amireman (us)                                          ahk-yosi (opponent)
+ ┌────────────────────────────┐                        ┌────────────────────────────┐
+ │ Orchestrator / match runner│   cop-thief match      │ their match runner          │
+ │ (orchestrator/match_driver)│ ◀── agreed 8-tool ───▶ │                             │
+ └─────────────┬──────────────┘   protocol (MATCH_     └──────────────┬──────────────┘
+               │   PEER.md) · bearer token · HTTPS                     │
+               │   every move dual-submitted to BOTH referees          │
+   ┌───────────┼───────────────┐                        ┌─────────────┼──────────────┐
+   ▼           ▼               ▼                        ▼             ▼              ▼
+ ┌──────────┐┌──────────┐                           ┌──────────┐┌──────────┐
+ │ our Cop  ││ our Thief│   ◀── Google Cloud Run ──▶ │ their Cop ││their Thief│
+ │ MCP (HTTPS)││MCP(HTTPS)│      (public endpoints)    │ MCP(HTTPS)││MCP(HTTPS)│
+ └──────────┘└──────────┘                           └──────────┘└──────────┘
+               │
+               ▼
+   ┌──────────────────────────┐     ┌───────────────────────────────────────┐
+   │ §9.2 bonus_report.json   │ ──▶ │ gmail_sender → lecturer                │
+   │ (byte-identical, agreed) │     │ rmisegal+uoh26b@gmail.com (both teams) │
+   └──────────────────────────┘     └───────────────────────────────────────┘
+```
+
+- For the **§12 bonus**, our match runner (`cop-thief match`) and the opponent's
+  run **simultaneously**; each team's two MCP servers are deployed publicly on
+  **Google Cloud Run** (HTTPS + bearer-token auth).
+- Both drivers follow the **agreed 8-tool, two-referee protocol**
+  (`docs/MATCH_PEER.md`): every move is **dual-submitted** to the cop-side
+  authoritative referee and the thief-side mirror so the engines stay in sync.
+- Roles swap at the halfway point — **ahk-yosi** cop in sub-games 1–3,
+  **amireman** cop in 4–6.
+- After 6 sub-games the **§9.2 `bonus_game`** report is produced (byte-identical
+  for both teams) and **`gmail_sender` emails it to the lecturer**
+  (`rmisegal+uoh26b@gmail.com`) with `mutual_agreement: true`
+  ([`assets/bonus_report.json`](assets/bonus_report.json)).
+
+### Components & layers
 
 - **Game core** (`game/`) is the only owner of the rules: board geometry,
   legal-action validation, capture detection, scoring, partial-observation
