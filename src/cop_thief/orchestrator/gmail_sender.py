@@ -39,10 +39,16 @@ def load_credentials(credentials_file: str, token_file: str):
     return creds
 
 
-def _encode(report: dict, recipient: str, subject: str, sender: str | None) -> dict:
-    """Build a Gmail raw payload whose body is exactly the JSON report."""
+def _encode(
+    report: dict, recipient: str, subject: str, sender: str | None, indent: int | None = 2
+) -> dict:
+    """Build a Gmail raw payload whose body is exactly the JSON report.
+
+    ``indent=None`` produces the compact single-line form ``json.dumps(report)``
+    used for the inter-group bonus report so both teams' bodies match.
+    """
     message = EmailMessage()
-    message.set_content(json.dumps(report, indent=2))  # body = JSON only, no extra text
+    message.set_content(json.dumps(report, indent=indent))  # body = JSON only, no extra text
     message["To"] = recipient
     message["Subject"] = subject
     if sender:
@@ -59,24 +65,27 @@ def send_report(
     token_file: str = "token.json",
     subject: str = "HW6 Cop-Thief Report",
     sender: str | None = None,
+    indent: int | None = 2,
 ) -> str:
     """Send ``report`` as JSON to ``recipient`` and return the Gmail message id."""
     from googleapiclient.discovery import build
 
     creds = load_credentials(credentials_file, token_file)
     service = build("gmail", "v1", credentials=creds)
-    body = _encode(report, recipient, subject, sender)
+    body = _encode(report, recipient, subject, sender, indent)
     sent = service.users().messages().send(userId="me", body=body).execute()
     return sent["id"]
 
 
 def send_report_from_env(
-    report: dict, default_recipient: str, subject: str = "HW6 Cop-Thief Report"
+    report: dict, default_recipient: str, subject: str = "HW6 Cop-Thief Report",
+    indent: int | None = 2,
 ) -> str:
     """Send using ``GMAIL_*`` / ``REPORT_RECIPIENT`` environment configuration."""
     return send_report(
         report,
         recipient=os.getenv("REPORT_RECIPIENT", default_recipient),
+        indent=indent,
         credentials_file=os.getenv("GMAIL_CREDENTIALS_FILE", "credentials.json"),
         token_file=os.getenv("GMAIL_TOKEN_FILE", "token.json"),
         subject=subject,

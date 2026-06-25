@@ -111,8 +111,8 @@ class MatchDriver:
                 "their_cop": their_cop, "their_thief": their_thief,
             }
             for index in range(1, self.params.num_games + 1):
-                summary, status = await self._play_subgame(index, clients)
-                self._tally(index, status, team_totals, breakdown)
+                summary, final = await self._play_subgame(index, clients)
+                self._tally(index, final, team_totals, breakdown)
                 if summary is not None:  # our cop half (4–6) — authoritative record
                     totals = accumulate(totals, summary.score)
                     summaries.append(summary)
@@ -122,19 +122,29 @@ class MatchDriver:
         return SeriesResult(sub_games=summaries, totals=totals,
                             per_team=team_totals, breakdown=breakdown)
 
-    def _tally(self, index: int, status: str, team_totals: dict, breakdown: list) -> None:
-        """Attribute a sub-game's points to each team (cop side scores cop pts, etc.)."""
+    def _tally(self, index: int, final: dict, team_totals: dict, breakdown: list) -> None:
+        """Append one §9.2 sub-game row (opponent's agreed shape) and tally team points."""
+        status = final.get("status")
         if status not in (SubGameResult.COP_WIN.value, SubGameResult.THIEF_WIN.value):
-            return  # voided / non-terminal — never crash the result email
-        sc = score_subgame(SubGameResult(status), self.table)
+            return  # voided / non-terminal — never crash the result report
+        result = SubGameResult(status)
+        sc = score_subgame(result, self.table)
         we_are_cop = self._layout(index)["we_are_cop"]
         cop_name = self.our_name if we_are_cop else self.opp_name
         thief_name = self.opp_name if we_are_cop else self.our_name
+        winner = "cop" if result is SubGameResult.COP_WIN else "thief"
         team_totals[cop_name] = team_totals.get(cop_name, 0) + sc["cop"]
         team_totals[thief_name] = team_totals.get(thief_name, 0) + sc["thief"]
-        breakdown.append({
-            "sub_game": index, "cop_group": cop_name, "thief_group": thief_name,
-            "result": status, "cop_score": sc["cop"], "thief_score": sc["thief"],
+        breakdown.append({  # exact key order matches docs/MATCH_PEER.md / opponent contract
+            "index": index,
+            "winner": winner,
+            "moves_played": int(final.get("thief_moves", 0)),
+            "cop_score": sc["cop"],
+            "thief_score": sc["thief"],
+            "technical_loss": False,
+            "cop_group": cop_name,
+            "thief_group": thief_name,
+            "winner_group": cop_name if winner == "cop" else thief_name,
         })
 
     def _layout(self, index: int) -> dict:
@@ -149,7 +159,7 @@ class MatchDriver:
             "opp_view": "their_thief" if we_are_cop else "their_cop",
         }
 
-    async def _play_subgame(self, index: int, clients: dict) -> tuple[SubGameSummary | None, str]:
+    async def _play_subgame(self, index: int, clients: dict) -> tuple[SubGameSummary | None, dict]:
         lay = self._layout(index)
         cop_cli, thief_cli = clients[lay["cop_server"]], clients[lay["thief_server"]]
         refs = [cop_cli, thief_cli]
@@ -183,9 +193,9 @@ class MatchDriver:
 
         result_status = statuses[0].get("status", "ongoing")
         if not lay["we_are_cop"]:
-            return None, result_status  # their authoritative half — they record it
+            return None, statuses[0]  # their authoritative half — they record it
         return (self._summarise(index, result_status, cop_start, thief_start, statuses[0]),
-                result_status)
+                statuses[0])
 
     async def _adopt_start(self, opp_cli) -> tuple[list[int], list[int]]:
         """Wait for the opponent's fresh reset (thief_moves==0) and return its start cells."""

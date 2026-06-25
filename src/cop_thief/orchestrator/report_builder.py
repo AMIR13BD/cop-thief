@@ -117,6 +117,57 @@ def build_bonus_from_halves(half_a: dict, half_b: dict) -> dict:
     )
 
 
+def _student_objs(raw: list) -> list[dict]:
+    """Parse ``"Full Name <id>"`` strings into ``{"name","id"}`` objects (opponent shape)."""
+    objs: list[dict] = []
+    for entry in raw:
+        s = str(entry).strip()
+        if "<" in s and s.endswith(">"):
+            name, ident = s[:-1].split("<", 1)
+            objs.append({"name": name.strip(), "id": ident.strip()})
+        else:
+            objs.append({"name": s, "id": ""})
+    return objs
+
+
+def build_bonus_match_report(series: SeriesResult, config: Config) -> dict:
+    """Build the §9.2 ``bonus_game`` report from one side's complete match data.
+
+    ``series.breakdown`` already holds all 6 sub-game rows in the agreed shape
+    (``index, winner, moves_played, cop_score, thief_score, technical_loss,
+    cop_group, thief_group, winner_group``). The opponent's identity comes from
+    ``config.match`` so the report is produced solo — both teams' synced engines
+    yield identical results, so both produce the same report to email verbatim.
+    Group 1 is the opponent (cop in sub-games 1–3); group 2 is us.
+    """
+    team = config.team
+    m = config.match
+    our = team["group_name"]
+    opp = m.get("opponent_name", "ahk-yosi")
+    rows = list(series.breakdown or [])
+    totals_by_group = {opp: 0, our: 0}  # opponent (group_1) first to match their key order
+    for r in rows:
+        totals_by_group[r["cop_group"]] = totals_by_group.get(r["cop_group"], 0) + r["cop_score"]
+        totals_by_group[r["thief_group"]] = totals_by_group.get(r["thief_group"], 0) + r["thief_score"]
+    return build_bonus_report(
+        groups={"group_1": opp, "group_2": our},
+        repos={"group_1": m.get("opponent_github_repo", ""), "group_2": team["github_repo"]},
+        mcp_urls={
+            "group_1_cop": m.get("opponent_cop_mcp_url", ""),
+            "group_1_thief": m.get("opponent_thief_mcp_url", ""),
+            "group_2_cop": team["cop_mcp_url"],
+            "group_2_thief": team["thief_mcp_url"],
+        },
+        students={
+            "group_1": _student_objs(m.get("opponent_students", [])),
+            "group_2": _student_objs(list(team.get("students", []))),
+        },
+        sub_games=rows,
+        totals_by_group=totals_by_group,
+        timezone_name=team["timezone"],
+    )
+
+
 def write_report(report: dict, output_dir: str | Path) -> Path:
     """Write ``report`` to a timestamped JSON file and return its path."""
     directory = Path(output_dir)
