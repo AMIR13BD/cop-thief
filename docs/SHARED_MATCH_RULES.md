@@ -5,11 +5,13 @@ Code and `config/config.yaml` cite this document by section so the implementatio
 and the contract never drift. It is written to match **this repository's
 implementation exactly** (see `game/` and `orchestrator/`).
 
-> Scope note. The **local section** (the completed work) runs both agents inside
+> Scope note. These rules apply to **both** the local single-repository run and
+> the cloud / inter-group bonus run. The **local section** runs both agents inside
 > one repository against these rules. The **bonus inter-team match** reuses the
-> same rules as the contract between two teams' engines; that stage is **deferred
-> / not yet completed** (see `docs/TODO.md`). Nothing here depends on the cloud or
-> on Gmail being wired up.
+> same rules as the contract between two teams' engines, and it was **completed**:
+> the live match vs team `ahk-yosi` was played using the agreed protocol
+> (`docs/MATCH_PEER.md`). **Cloud deployment (Google Cloud Run) and Gmail report
+> delivery are now completed, not deferred** (see `docs/TODO.md`).
 
 ---
 
