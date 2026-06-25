@@ -33,12 +33,13 @@ intervention** from start to final report.
 11. [How to run the MCP servers](#11-how-to-run-the-mcp-servers)
 12. [How to run the full 6-game series](#12-how-to-run-the-full-6-game-series)
 13. [How Gmail reporting works](#13-how-gmail-reporting-works)
-14. [Testing](#14-testing)
-15. [Security notes](#15-security-notes)
-16. [Evidence: log & run examples](#16-evidence-log--run-examples)
-17. [Project layout](#17-project-layout)
-18. [Configuration reference](#18-configuration-reference)
-19. [License & credits](#19-license--credits)
+14. [Bonus round — inter-group match](#14-bonus-round--inter-group-match)
+15. [Testing](#15-testing)
+16. [Security notes](#16-security-notes)
+17. [Evidence: log & run examples](#17-evidence-log--run-examples)
+18. [Project layout](#18-project-layout)
+19. [Configuration reference](#19-configuration-reference)
+20. [License & credits](#20-license--credits)
 
 ---
 
@@ -336,10 +337,10 @@ read from `config.yaml`.
 
 ## 13. How Gmail reporting works
 
-> **Deferred — not part of the completed local section.** The local pipeline
-> **writes the JSON report to `results/reports/`**; it does not email anything by
-> default. The Gmail path below is scaffolded in `orchestrator/gmail_sender.py`
-> and only runs when you pass `--email` after completing the one-time OAuth setup.
+> The local series **writes the JSON report to `results/reports/`** and only
+> emails when you pass `--email`; the **bonus match (§14) emails automatically**
+> when it ends. Both use the Gmail path below (`orchestrator/gmail_sender.py`)
+> after the one-time OAuth setup.
 
 Following the course Google API guide:
 
@@ -352,7 +353,49 @@ Following the course Google API guide:
    email **body is exactly the JSON report, with no extra text**, so the grading
    harness can parse it. Recipient and file paths come from `.env`.
 
-## 14. Testing
+## 14. Bonus round — inter-group match
+
+For the §12 bonus, two teams play a live 6-sub-game match across **four** MCP
+servers (two per team). We are **amireman** (group_2); our opponent is
+**ahk-yosi** (group_1). The full contract, handshake, and per-sub-game reset
+protocol are in [`docs/MATCH_PEER.md`](docs/MATCH_PEER.md).
+
+**Two synced referees.** Each sub-game has an authoritative referee (the cop
+side's cop server) and a mirror (the thief side's thief server); every move is
+**dual-submitted to both** so the two engines stay byte-identical. Roles swap at
+the halfway point:
+
+- **Sub-games 1–3:** ahk-yosi = Cop, amireman = Thief (their cop server referees).
+- **Sub-games 4–6:** amireman = Cop, ahk-yosi = Thief (our cop server referees).
+
+Each team resets only the server it owns, and the thief side adopts the cop
+side's start cells. Our two servers are deployed on **Google Cloud Run** (HTTPS,
+bearer-token auth) and expose the agreed 8-tool contract
+(`mcp_servers/match_server.py`): `health_check, reset, get_observation,
+validate_action, submit_turn, get_match_status, receive_message, get_messages`.
+
+**Run our side of the match** (both teams launch simultaneously):
+
+```bash
+uv run cop-thief match                        # LLM agents; plays 6 sub-games, builds + emails the §9.2 report
+uv run cop-thief match --provider heuristic   # free/fast dry run, no API calls
+uv run cop-thief match --no-email             # skip the auto-email
+```
+
+When the six sub-games finish, the driver writes the **§9.2 `bonus_game`** report
+to `results/reports/` and emails it (body = compact JSON only). Both teams email
+the **byte-identical** report to the grader with `mutual_agreement: true` (§12.2).
+
+**Result.** ahk-yosi **80**, amireman **60** — series winner **ahk-yosi**; bonus
+claim ahk-yosi 10 / amireman 7.
+
+![Both teams running their drivers side by side for the live inter-group match (amireman + ahk-yosi).](assests/IMG_0513.jpeg)
+
+![`cop-thief match` driving all six sub-games to completion — the §9.2 bonus report is written to results/reports/ and emailed.](assests/IMG_0523.jpeg)
+
+![The stateful two-referee match server (mcp_servers/match_server.py) and its functional self-test.](assests/IMG_0512.jpeg)
+
+## 15. Testing
 
 ```bash
 uv run pytest                                   # run the suite
@@ -365,10 +408,11 @@ capture/engine, scoring, partial observation, barrier-aware geometry (BFS around
 walls), the heuristic policies (thief immediate-safety / mobility / last-seen
 memory / lookahead, value-gated cop barriers, no hidden-opponent leak), a balance
 sanity guard, illegal actions, start positions, agent sanitisation/fallback, the
-report schemas, doc hygiene, and the CLI — **97 tests, ~95 % coverage**
-(target ≥ 85 %). The core game logic and geometry are at 100 %.
+report schemas (including the §9.2 `bonus_game` shape), doc hygiene, and the
+CLI — **111 tests** (coverage target ≥ 85 % met). The core game logic and
+geometry are at 100 %.
 
-## 15. Security notes
+## 16. Security notes
 
 - **No secrets in git.** `.env`, `credentials.json`, `token.json`, and keys are
   git-ignored; only `.env.example` ships.
@@ -382,7 +426,7 @@ report schemas, doc hygiene, and the CLI — **97 tests, ~95 % coverage**
 - **Rate limiting / retries** are configured (`match.rate_limit_per_min`,
   `match.max_retries`) to stay friendly to a peer team's API gateway.
 
-## 16. Evidence: log & run examples
+## 17. Evidence: log & run examples
 
 Console output of a full offline series (deterministic, seed 42) — the cop and
 thief each win some sub-games, and the cop spends barriers along the way:
@@ -426,7 +470,7 @@ and the new barrier shows up in the turn's `barriers` list):
 
 Put GUI/CLI screenshots under `results/screenshots/` for the cloud run.
 
-## 17. Project layout
+## 18. Project layout
 
 ```
 cop-thief/
@@ -448,7 +492,7 @@ cop-thief/
   pyproject.toml  uv.lock  .env.example  .gitignore
 ```
 
-## 18. Configuration reference
+## 19. Configuration reference
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -468,7 +512,7 @@ cop-thief/
 | `llm.model` | `claude-opus-4-8` | model id (Haiku is a cheaper option) |
 | `team.*` | placeholders | group name, students, GitHub repo, MCP URLs, timezone |
 
-## 19. License & credits
+## 20. License & credits
 
 MIT licensed. Built for *AI Agent Orchestration* (HW6), Dr. Yoram Segal,
 University of Haifa. Game spec © Dr. Yoram Segal; this implementation by the
