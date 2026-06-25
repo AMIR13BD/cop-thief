@@ -21,10 +21,45 @@ from ..game.actions import Action, Role, TurnPayload
 from ..game.board import Board, Position, chebyshev_distance
 from ..game.engine import GameEngine
 from ..game.state import GameState, SubGameResult
+from ..security.auth import extract_bearer, verify_token
+from ..security.tokens import resolve_expected_token
 from .server_app import _authorize
 
 # Version string returned by health_check (matches the opponent's "1.00").
 MATCH_PROTOCOL_VERSION = "1.00"
+
+
+class BearerAuthMiddleware:
+    """ASGI gate: reject tokenless/invalid HTTP requests with 401 before any tool runs.
+
+    Defense-in-depth on top of each tool's ``_authorize`` — the assignment (§7) and
+    the opponent's check expect a true transport-level 401, not a per-tool error.
+    When no token is configured (local dev) the gate is open.
+    """
+
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        expected = resolve_expected_token()
+        if expected is not None:
+            headers = dict(scope.get("headers") or [])
+            provided = extract_bearer(headers.get(b"authorization", b"").decode())
+            if not verify_token(provided, expected):
+                body = b'{"error": "missing or invalid bearer token"}'
+                await send({
+                    "type": "http.response.start",
+                    "status": 401,
+                    "headers": [(b"content-type", b"application/json"),
+                                (b"content-length", str(len(body)).encode()),
+                                (b"www-authenticate", b"Bearer")],
+                })
+                await send({"type": "http.response.body", "body": body})
+                return
+        await self.app(scope, receive, send)
 
 
 @dataclass
@@ -188,5 +223,9 @@ def build_match_app(role: Role, config: Config | None = None):
 
 
 def run_match_server(role: Role, host: str, port: int) -> None:
-    """Launch the match server over HTTP (front with TLS for the HTTPS requirement)."""
-    build_match_app(role).run(transport="http", host=host, port=port)
+    """Launch the match server over HTTP behind the 401 bearer gate (TLS fronts HTTPS)."""
+    import uvicorn
+    from starlette.middleware import Middleware
+
+    app = build_match_app(role).http_app(middleware=[Middleware(BearerAuthMiddleware)])
+    uvicorn.run(app, host=host, port=port)
