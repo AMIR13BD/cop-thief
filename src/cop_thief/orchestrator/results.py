@@ -33,6 +33,10 @@ class SeriesResult:
 
     sub_games: list[SubGameSummary]
     totals: dict[str, int]
+    # Inter-group match extras (None for the local series): per-team point totals
+    # across all 6 sub-games and a per-sub-game breakdown, used for the result email.
+    per_team: dict[str, int] | None = None
+    breakdown: list[dict] | None = None
 
 
 def _record_dict(record: TurnRecord) -> dict:
