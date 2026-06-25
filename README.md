@@ -39,7 +39,8 @@ intervention** from start to final report.
 17. [Evidence: log & run examples](#17-evidence-log--run-examples)
 18. [Project layout](#18-project-layout)
 19. [Configuration reference](#19-configuration-reference)
-20. [License & credits](#20-license--credits)
+20. [Contribution guidelines](#20-contribution-guidelines)
+21. [License & credits](#21-license--credits)
 
 ---
 
@@ -311,11 +312,11 @@ The replay GUI showing a local game from opening to capture — these screenshot
 together with the cloud-match CLI logs in [§14](#14-bonus-round--inter-group-match),
 are the **visualization & proof** the assignment asks for (§11):
 
-![Opening of sub-game 1 — cop (C, blue) and thief (T, red) on the 5×5 board, 25 moves available, cop holding all 5 barriers.](assests/gui_opening.png)
+![Opening of sub-game 1 — cop (C, blue) and thief (T, red) on the 5×5 board, 25 moves available, cop holding all 5 barriers.](assets/gui_opening.png)
 
-![Mid-game — the cop has dropped barriers (black, impassable cells) and is closing in; the panel shows barriers remaining and the per-turn natural-language line (the bluff channel).](assests/gui_midgame.png)
+![Mid-game — the cop has dropped barriers (black, impassable cells) and is closing in; the panel shows barriers remaining and the per-turn natural-language line (the bluff channel).](assets/gui_midgame.png)
 
-![End of the series — sub-game 6 ends in a capture (cop and thief share a cell, gold ring) with the running per-role totals.](assests/gui_capture.png)
+![End of the series — sub-game 6 ends in a capture (cop and thief share a cell, gold ring) with the running per-role totals.](assets/gui_capture.png)
 
 ### Running on Windows
 
@@ -417,11 +418,11 @@ the **byte-identical** report to the grader with `mutual_agreement: true` (§12.
 **Result.** ahk-yosi **80**, amireman **60** — series winner **ahk-yosi**; bonus
 claim ahk-yosi 10 / amireman 7.
 
-![Both teams running their drivers side by side for the live inter-group match (amireman + ahk-yosi).](assests/IMG_0513.jpeg)
+![Both teams running their drivers side by side for the live inter-group match (amireman + ahk-yosi).](assets/IMG_0513.jpeg)
 
-![`cop-thief match` driving all six sub-games to completion — the §9.2 bonus report is written to results/reports/ and emailed.](assests/IMG_0523.jpeg)
+![`cop-thief match` driving all six sub-games to completion — the §9.2 bonus report is written to results/reports/ and emailed.](assets/IMG_0523.jpeg)
 
-![The stateful two-referee match server (mcp_servers/match_server.py) and its functional self-test.](assests/IMG_0512.jpeg)
+![The stateful two-referee match server (mcp_servers/match_server.py) and its functional self-test.](assets/IMG_0512.jpeg)
 
 ## 15. Testing
 
@@ -540,7 +541,26 @@ cop-thief/
 | `llm.model` | `claude-opus-4-8` | model id (Haiku is a cheaper option) |
 | `team.*` | placeholders | group name, students, GitHub repo, MCP URLs, timezone |
 
-## 20. License & credits
+## 20. Contribution guidelines
+
+Coding standards enforced across the project (assignment §3; submission guidelines §2.1):
+
+- **File size:** every source file stays **≤ 150 code lines** (blank/comment lines
+  excluded). Split into helper modules or mixins before crowding a file.
+- **Single responsibility & DRY:** small functions, one job each; no copy-paste —
+  shared logic is factored out (e.g. the `*_turns` / `*_client` mixins, `bonus_report`).
+- **Docstrings & types:** every module, class, and function has a docstring that
+  explains the *why*, and public functions carry type hints.
+- **No magic values / no hard-coding:** all game parameters live in
+  `config/config.yaml`; secrets only in `.env` (never committed).
+- **Lint & format:** `uv run ruff check src tests` must report **zero warnings**
+  (line length ≤ 100). Run it before every commit.
+- **Tests first (TDD):** add or update tests under `tests/` for any behaviour
+  change; keep coverage **≥ 85 %** (`uv run pytest --cov=cop_thief`).
+- **Git workflow:** work on a feature branch, keep commits focused, open a PR into
+  `main`, and ensure Ruff + tests are green before merging.
+
+## 21. License & credits
 
 MIT licensed. Built for *AI Agent Orchestration* (HW6), Dr. Yoram Segal,
 University of Haifa. Game spec © Dr. Yoram Segal; this implementation by the
