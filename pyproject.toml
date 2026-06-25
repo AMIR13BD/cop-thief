@@ -5,7 +5,7 @@ description = "Dual AI agent Cop-vs-Thief chase game orchestrated over two MCP s
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-authors = [{ name = "Ahmad Kaiss", email = "ahmadkaiss920@gmail.com" }]
+authors = [{ name = "Amir Fadila" }, { name = "Eman Sarhan" }]
 
 dependencies = [
     "pyyaml>=6.0.2",
