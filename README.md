@@ -121,7 +121,8 @@ and the deployed cloud setup used for the inter-group bonus match.
       │ Referee / game core│  rules, capture,      │ report_builder           │
       │   (AUTHORITATIVE)  │  scoring              │  → results/reports/*.json │
       └─────────┬──────────┘                       └──────────────────────────┘
-                │ exposed locally as MCP tools (observe / submit_turn), bearer-guarded
+                │ MCP tool boundary (observe / submit_turn); referee remains
+                │ client-side; bearer-guarded when a token is configured
       ┌─────────┴──────────┐          ┌─────────────────────┐
       │ Cop MCP server     │          │ Thief MCP server    │   FastMCP on 127.0.0.1
       │   (:8101)          │          │   (:8102)           │   (`run --mcp` drives via these)
@@ -134,7 +135,9 @@ and the deployed cloud setup used for the inter-group bonus match.
 - The **Referee / game core is authoritative** — it validates every action and
   decides capture/score; agents never mutate state directly.
 - With `--mcp`, the same turns flow through the **two local FastMCP servers**
-  (cop `:8101`, thief `:8102`) over bearer-guarded `observe` / `submit_turn`.
+  (cop `:8101`, thief `:8102`), which are **thin tool endpoints** exposing
+  `observe` / `submit_turn`; the **authoritative referee stays in the
+  orchestrator/client** — it does not live inside the MCP servers.
 - After 6 sub-games, `report_builder` writes the **§9.1 JSON report** to
   `results/reports/` — fully offline, no network or API key required.
 
@@ -147,7 +150,8 @@ and the deployed cloud setup used for the inter-group bonus match.
  │ (orchestrator/match_driver)│ ◀── agreed 8-tool ───▶ │                             │
  └─────────────┬──────────────┘   protocol (MATCH_     └──────────────┬──────────────┘
                │   PEER.md) · bearer token · HTTPS                     │
-               │   every move dual-submitted to BOTH referees          │
+               │   every move dual-submitted to both engines:          │
+               │   cop-side authoritative, thief-side mirror           │
    ┌───────────┼───────────────┐                        ┌─────────────┼──────────────┐
    ▼           ▼               ▼                        ▼             ▼              ▼
  ┌──────────┐┌──────────┐                           ┌──────────┐┌──────────┐
