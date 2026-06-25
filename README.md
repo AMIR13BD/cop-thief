@@ -431,10 +431,7 @@ the **byte-identical** report to the grader with `mutual_agreement: true` (§12.
 **Result.** ahk-yosi **80**, amireman **60** — series winner **ahk-yosi**; bonus
 claim ahk-yosi 10 / amireman 7.
 
-**🎥 Watch the full match:** [amireman vs ahk-yosi — full 6-sub-game inter-group game](https://www.youtube.com/watch?v=FdXurY4s4dY).
-A complete recording of the live match: both teams' drivers running against the
-four Cloud Run MCP servers, the natural-language messages exchanged each turn, and
-all six sub-games playing out to the final §9.2 result.
+**🎥 Watch the full match: [amireman vs ahk-yosi — full 6-sub-game inter-group game](https://www.youtube.com/watch?v=FdXurY4s4dY). A complete recording of the live match: both teams' drivers running against the four Cloud Run MCP servers, the natural-language messages exchanged each turn, and all six sub-games playing out to the final §9.2 result.**
 
 ![Both teams running their drivers side by side for the live inter-group match (amireman + ahk-yosi).](assets/IMG_0513.jpeg)
 
