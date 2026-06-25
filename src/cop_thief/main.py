@@ -194,39 +194,30 @@ def _run_match(args) -> int:
 
 
 def _email_match_result(config, series, *, no_email: bool) -> None:
-    """Auto-send a per-team result summary via the Gmail pipeline (§9 delivery)."""
+    """Build the §9.2 ``bonus_game`` report (opponent's agreed shape), save it, and email it."""
+    from .orchestrator.report_builder import build_bonus_match_report, write_report
+
     our = config.team["group_name"]
     opp = config.match.get("opponent_name", "ahk-yosi")
-    per_team = series.per_team or {}
-    ranked = sorted(per_team.items(), key=lambda kv: kv[1], reverse=True)
-    if len(ranked) >= 2 and ranked[0][1] == ranked[1][1]:
-        winner = "tie"
-    else:
-        winner = ranked[0][0] if ranked else "n/a"
-    for name, pts in ranked:
-        print(f"  {name}: {pts} points")
-    print(f"  winner: {winner}")
+    report = build_bonus_match_report(series, config)
+    totals, claim = report["totals_by_group"], report["bonus_claim"]
+    path = write_report(report, config.report["output_dir"])
+    print(f"§9.2 bonus_game report written to {path}")
+    for name, pts in totals.items():
+        print(f"  {name}: total={pts}  bonus={claim[name]}")
     if no_email:
-        print("Email skipped (--no-email).")
+        print("Email skipped (--no-email). Share this file; both teams email it verbatim.")
         return
-
-    from datetime import UTC, datetime
-    report = {
-        "match": f"{our} (group_2) vs {opp} (group_1)",
-        "generated_utc": datetime.now(UTC).isoformat(),
-        "totals_by_team": per_team,
-        "winner": winner,
-        "sub_games": series.breakdown or [],
-    }
     try:
         from .orchestrator.gmail_sender import send_report_from_env
+        # indent=None -> compact single-line body, matching the opponent's wire format.
         msg_id = send_report_from_env(
             report, config.report["recipient"],
-            subject=f"HW6 Cop-Thief Match — {our} vs {opp} (winner: {winner})",
+            subject=f"HW6 Cop-Thief Bonus — {opp} vs {our}", indent=None,
         )
-        print(f"Result emailed (message id {msg_id})")
+        print(f"Bonus report emailed (message id {msg_id})")
     except Exception as exc:  # noqa: BLE001 — email is best-effort; never fail the match on it
-        print(f"WARNING: result email failed ({exc}). Run finished; results saved to disk.")
+        print(f"WARNING: result email failed ({exc}). Report saved to disk; send it manually.")
 
 
 def _run_peer_report(args) -> int:
