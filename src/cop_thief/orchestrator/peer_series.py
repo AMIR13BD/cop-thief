@@ -19,23 +19,18 @@ import asyncio
 import random
 
 from ..agents.cop_agent import build_cop_agent
-from ..agents.strategies import legal_targets
 from ..config import Config
-from ..game.actions import Action, ActionType, Role, TurnPayload, round_number
-from ..game.board import Position
+from ..game.actions import Role, TurnPayload, round_number
 from ..game.scoring import accumulate, score_subgame
 from ..game.setup import new_subgame
 from ..security.tokens import resolve_peer_token
 from .mcp_series import TechnicalLoss
+from .peer_client import _PeerThiefClient
 from .referee import SubGameReferee
 from .results import SeriesResult, SubGameSummary, TurnLogWriter
 
-# An action the engine is guaranteed to reject, so an unparseable peer reply is
-# funnelled through the normal illegal-move forfeit path (§2.5) instead of crashing.
-_FORFEIT_ACTION = Action(ActionType.MOVE, Position(-1, -1))
 
-
-class PeerSeriesRunner:
+class PeerSeriesRunner(_PeerThiefClient):
     """Referee our cop half by pulling the opponent thief's moves over MCP."""
 
     def __init__(
@@ -61,16 +56,6 @@ class PeerSeriesRunner:
         self.peer_token = peer_token or resolve_peer_token()
         self.writer = TurnLogWriter(config.logging["dir"]) if log else None
 
-    # ----- client construction --------------------------------------------
-    def _peer_client(self):
-        """A streamable-HTTP client to the opponent's thief server."""
-        from fastmcp import Client
-        from fastmcp.client.transports import StreamableHttpTransport
-
-        headers = {"Authorization": f"Bearer {self.peer_token}"} if self.peer_token else None
-        return Client(StreamableHttpTransport(self.peer_thief_url, headers=headers))
-
-    # ----- the run loop ----------------------------------------------------
     def run(self) -> SeriesResult:
         """Synchronous entrypoint: referee the half and return its result."""
         return asyncio.run(self._run())
@@ -98,43 +83,6 @@ class PeerSeriesRunner:
             self.writer.series_end(totals)
             self.writer.close()
         return SeriesResult(sub_games=summaries, totals=totals)
-
-    async def _call(self, client, tool: str, args: dict) -> dict:
-        """Call an MCP tool with a retry budget; exhaustion is a Technical Loss (§3)."""
-        last: Exception | None = None
-        for _ in range(self.max_retries + 1):
-            try:
-                result = await client.call_tool(tool, args)
-                return result.data if result.data is not None else {}
-            except Exception as exc:  # noqa: BLE001 — transport/tool failure -> retry/void
-                last = exc
-        raise TechnicalLoss(f"tool {tool!r} failed after {self.max_retries + 1} tries: {last}")
-
-    async def _ask_peer(self, client, observation: dict, opponent_message: str):
-        """One ``play_turn`` call; a garbled reply degrades to a forfeit action."""
-        data = await self._call(
-            client, "play_turn", {"observation": observation, "opponent_message": opponent_message}
-        )
-        message = str(data.get("message", ""))
-        try:
-            action = Action.from_dict(data["action"])
-        except Exception:  # noqa: BLE001 — malformed action -> let the engine forfeit it
-            action = _FORFEIT_ACTION
-        return message, action
-
-    async def _peer_move(self, client, observation: dict, opponent_message: str):
-        """Pull the opponent thief's move; re-prompt once if the first is illegal (§2.5)."""
-        message, action = await self._ask_peer(client, observation, opponent_message)
-        if not self._is_legal(action, observation):
-            message, action = await self._ask_peer(client, observation, opponent_message)
-        return message, action
-
-    def _is_legal(self, action: Action, observation: dict) -> bool:
-        """The thief may only move; check the destination against our authoritative view."""
-        if action.type is not ActionType.MOVE:
-            return False
-        targets = set(legal_targets(observation, self.params.eight_directional))
-        return tuple(action.to.to_list()) in targets
 
     async def _run_subgame(self, index, setup_rng, thief_cli) -> SubGameSummary:
         state = new_subgame(index, self.params, setup_rng)
