@@ -70,11 +70,14 @@ def send_report(
     return sent["id"]
 
 
-def send_report_from_env(report: dict, default_recipient: str) -> str:
+def send_report_from_env(
+    report: dict, default_recipient: str, subject: str = "HW6 Cop-Thief Report"
+) -> str:
     """Send using ``GMAIL_*`` / ``REPORT_RECIPIENT`` environment configuration."""
     return send_report(
         report,
         recipient=os.getenv("REPORT_RECIPIENT", default_recipient),
         credentials_file=os.getenv("GMAIL_CREDENTIALS_FILE", "credentials.json"),
         token_file=os.getenv("GMAIL_TOKEN_FILE", "token.json"),
+        subject=subject,
     )

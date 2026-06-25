@@ -79,6 +79,10 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     )
     mt.add_argument("--no-log", action="store_true", help="do not write the JSONL turn log")
     mt.add_argument(
+        "--no-email", action="store_true",
+        help="do not auto-email the result summary (Gmail API) when the match ends",
+    )
+    mt.add_argument(
         "--poll-interval", type=float, default=1.0, help="status poll seconds (default 1.0)"
     )
     return parser.parse_args(argv)
@@ -185,7 +189,44 @@ def _run_match(args) -> int:
     _print_summary(series, series.totals)
     path = _write_half(config, "2", series)
     print(f"Our cop half (sub-games 4-6) written to {path}")
+    _email_match_result(config, series, no_email=args.no_email)
     return 0
+
+
+def _email_match_result(config, series, *, no_email: bool) -> None:
+    """Auto-send a per-team result summary via the Gmail pipeline (§9 delivery)."""
+    our = config.team["group_name"]
+    opp = config.match.get("opponent_name", "ahk-yosi")
+    per_team = series.per_team or {}
+    ranked = sorted(per_team.items(), key=lambda kv: kv[1], reverse=True)
+    if len(ranked) >= 2 and ranked[0][1] == ranked[1][1]:
+        winner = "tie"
+    else:
+        winner = ranked[0][0] if ranked else "n/a"
+    for name, pts in ranked:
+        print(f"  {name}: {pts} points")
+    print(f"  winner: {winner}")
+    if no_email:
+        print("Email skipped (--no-email).")
+        return
+
+    from datetime import UTC, datetime
+    report = {
+        "match": f"{our} (group_2) vs {opp} (group_1)",
+        "generated_utc": datetime.now(UTC).isoformat(),
+        "totals_by_team": per_team,
+        "winner": winner,
+        "sub_games": series.breakdown or [],
+    }
+    try:
+        from .orchestrator.gmail_sender import send_report_from_env
+        msg_id = send_report_from_env(
+            report, config.report["recipient"],
+            subject=f"HW6 Cop-Thief Match — {our} vs {opp} (winner: {winner})",
+        )
+        print(f"Result emailed (message id {msg_id})")
+    except Exception as exc:  # noqa: BLE001 — email is best-effort; never fail the match on it
+        print(f"WARNING: result email failed ({exc}). Run finished; results saved to disk.")
 
 
 def _run_peer_report(args) -> int:
