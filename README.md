@@ -7,6 +7,19 @@ and are driven through **two separate MCP servers** by an orchestrator that runs
 a full 6-sub-game series and **writes a JSON report to disk** — with **no manual
 intervention** from start to final report.
 
+---
+
+### 🎬 The Matchup — watch the full game
+
+> ## ▶️ **[amireman vs ahk-yosi — full inter-group match (YouTube)](https://www.youtube.com/watch?v=FdXurY4s4dY)**
+>
+> The complete live bonus match: both teams' drivers running against the four
+> Cloud Run MCP servers, the natural-language trash-talk exchanged each turn, and
+> all six sub-games playing out to the final §9.2 result. **Full write-up in
+> [§14](#14-bonus-round--inter-group-match).**
+
+---
+
 > **Scope.** This repository delivers the **local section**: the full game,
 > partial observability, barriers, the two local MCP servers, the orchestrator
 > that drives the series through them, and the JSON report written under
