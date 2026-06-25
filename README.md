@@ -210,6 +210,24 @@ Each turn carries two things (SHARED_MATCH_RULES.md §2.2):
   one (`agents/messages.py`); LLM agents write and interpret messages freely
   (`orchestrator/prompts.py`).
 
+**The architecture challenge (assignment §11).** The agents coordinate over
+**free natural language with no predefined protocol**, which raises two problems
+we design around:
+
+- **Linguistic ambiguity & deception.** A message can be vague or an outright
+  bluff. We never let language drive state: every turn binds a **structured
+  `action`** that the referee validates and scores, while the free-text `message`
+  is only an *advisory signal* the receiving agent's LLM interprets to update its
+  belief about the hidden opponent. A lie can mislead the opponent's *guess* but
+  can never change the true board — so the protocol stays robust without being
+  rigid.
+- **Mutual identity & authenticity.** Servers require a per-request
+  `Authorization: Bearer` token (constant-time check), so each side talks only to
+  the authenticated peer; and because the cop-side referee is the single source
+  of truth for positions, an agent can't spoof its location — `get_match_status`
+  / `validate_action` confirm the real state. Identity and location are thus
+  asserted by the servers, not by trust in the message text.
+
 ## 7. Game rules
 
 - **Grid**: `R×C` (default 5×5) from config; origin `[0,0]` top-left, `[row,col]`.
@@ -288,6 +306,16 @@ the score, and each turn's natural-language message (bluffs included) — with
 **Play / step / restart** controls. Uses the offline heuristic agents so it stays
 responsive. (Needs Tk, which ships with the standard python.org build; on a
 Homebrew Python install it via `brew install python-tk`.)
+
+The replay GUI showing a local game from opening to capture — these screenshots,
+together with the cloud-match CLI logs in [§14](#14-bonus-round--inter-group-match),
+are the **visualization & proof** the assignment asks for (§11):
+
+![Opening of sub-game 1 — cop (C, blue) and thief (T, red) on the 5×5 board, 25 moves available, cop holding all 5 barriers.](assests/gui_opening.png)
+
+![Mid-game — the cop has dropped barriers (black, impassable cells) and is closing in; the panel shows barriers remaining and the per-turn natural-language line (the bluff channel).](assests/gui_midgame.png)
+
+![End of the series — sub-game 6 ends in a capture (cop and thief share a cell, gold ring) with the running per-role totals.](assests/gui_capture.png)
 
 ### Running on Windows
 
