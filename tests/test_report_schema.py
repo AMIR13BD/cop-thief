@@ -17,7 +17,7 @@ _BONUS_KEYS = {
     "report_type", "groups", "github_repo_group_1", "github_repo_group_2",
     "mcp_url_group_1_cop", "mcp_url_group_1_thief", "mcp_url_group_2_cop",
     "mcp_url_group_2_thief", "timezone", "students_group_1", "students_group_2",
-    "sub_games", "totals_by_group", "bonus_claim", "mutual_agreement",
+    "sub_games", "totals_by_group", "bonus_claim", "series_winner", "mutual_agreement",
 }
 
 
@@ -60,6 +60,7 @@ def test_bonus_report_shape_and_mutual_agreement():
     assert report["report_type"] == "bonus_game"
     assert report["mutual_agreement"] is True
     assert report["bonus_claim"] == {"Team-A": 7, "Team-B": 10}
+    assert report["series_winner"] == "Team-B"
 
 
 def _half(group: str, name: str, sub_games: list[dict]) -> dict:
@@ -85,6 +86,7 @@ def test_merge_halves_maps_cop_thief_scores_to_groups():
     # Each group: own cop wins (60) + opponent's thief points against them (15) = 75 each -> tie.
     assert report["totals_by_group"] == {"Alpha": 75, "Beta": 75}
     assert report["bonus_claim"] == {"Alpha": 5, "Beta": 5}
+    assert report["series_winner"] == "tie"
     assert [s["sub_game"] for s in report["sub_games"]] == [1, 2, 3, 4, 5, 6]
     assert report["groups"] == {"group_1": "Alpha", "group_2": "Beta"}
 
