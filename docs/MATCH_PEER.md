@@ -57,6 +57,53 @@ algorithm (seed 1234), and write a lockstep driver. Pending: their exact
 tool signatures (`get_observation` params, `submit_turn`/`validate_action`
 payloads, `reset` signature, `get_match_status` shape) and barrier confirmation.
 
+## Per-sub-game sequencing & reset handoff (REQUIRED — this is what stalled SG1→SG2)
+
+The match is 6 sub-games played **in order** over the same four servers. The
+single most important agreement, and the one that broke our first live run, is
+**who resets which server between sub-games**. Rules:
+
+1. **Each team resets only the server it OWNS.** Nobody resets the opponent's server.
+2. **The cop side is authoritative for the start cells** that sub-game. At the
+   start of sub-game *i* the cop side calls `reset(cop, thief)` on **its own cop
+   server** to that sub-game's start (so `get_match_status` → `thief_moves: 0`).
+3. **The thief side adopts the cop side's start.** It polls the cop server until
+   `thief_moves == 0`, reads `cop`/`thief`, and `reset`s **its own thief server**
+   to those exact cells. (No shared seed needed — the thief mirrors whatever the
+   cop side chose.)
+4. **Every turn, each team submits its own role's move to BOTH servers** (its own
+   + the opponent's) so authoritative and mirror stay in sync.
+5. **A sub-game ends** when both servers report a terminal `status`
+   (`cop_win`/`thief_win`). Then **advance to the next index and GOTO step 2** —
+   the cop side resets again for the new sub-game.
+
+Role split: group_1 (ahk-yosi) is cop for 1–3, group_2 (us) is cop for 4–6. So
+group_1 resets its cop server at the top of sub-games 1, 2, 3; group_2 resets its
+cop server at the top of 4, 5, 6. The thief side resets its own thief server each
+time after adopting the cop side's start.
+
+Our driver implements exactly this in `orchestrator/match_driver.py`:
+`_run` loops `index` 1..6 → `_play_subgame` → for sub-games we referee we
+`reset` our cop server + `_await_start` the opponent's thief mirror; for sub-games
+they referee we `_adopt_start` (read their cop server's fresh reset) + `reset` our
+thief mirror; then a turn loop dual-submits via `_take_our_turn`.
+
+**What we observed live (2026-06-25):** SG1 played end-to-end and ended `cop_win`
+(their cop captured our thief) — authoritative (their cop) and mirror (our thief)
+agreed. Then it stalled: **their cop server stayed frozen at the SG1 `cop_win`
+result and was never reset for SG2**, so our thief driver waited forever for a
+clean `thief_moves: 0`. Their networked driver must **loop all 6 sub-games and
+re-`reset` its cop server at the top of each one** (step 2/5 above), not play a
+single sub-game and stop.
+
+**Repo note (their public repo, checked 2026-06-25):** `cop-thief-match` there is
+the **loopback** `LocalMatch` (both teams in-process, local referees — not the
+networked driver), and `mcp/server_app.py` exposes only **6 tools with no
+`reset`** (self-resets once at boot to a random seeded start). Their *deployed*
+servers clearly have more (we saw `reset` to our agreed cells + both roles
+moving), so **their real code is newer than what's pushed** — they should push the
+networked driver + the reset-capable 8-tool server they actually run.
+
 ## Verify
 Health-check (expect non-401 with token, 401 without):
 ```
