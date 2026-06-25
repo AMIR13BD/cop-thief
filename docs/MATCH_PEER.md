@@ -1,8 +1,13 @@
-# Inter-group match — opponent team & reconciliation status
+# Inter-group match — opponent team & final protocol (completed)
 
-Live working notes for the §12 bonus match. Bearer tokens are **not** here — they
-live only in `.env` (git-ignored). See also `docs/MATCH_PROTOCOL.md` (our v0.1
-proposal) and `docs/SHARED_MATCH_RULES.md`.
+> **Status: completed.** The §12 bonus match vs team `ahk-yosi` was played to the
+> end on the agreed protocol. **Final result: ahk-yosi 80 / amireman 60**
+> (series winner ahk-yosi; bonus claim 10/7), `mutual_agreement: true`; both teams
+> emailed the same byte-identical §9.2 JSON
+> ([`../assets/bonus_report.json`](../assets/bonus_report.json)).
+
+Bearer tokens are **not** here — they live only in `.env` (git-ignored). See also
+`docs/MATCH_PROTOCOL.md` (design notes) and `docs/SHARED_MATCH_RULES.md`.
 
 ## Opponent team — `ahk-yosi` (group_1)
 - Members: yosef shanaa (213314859), ahmad kaiss (325811255)
@@ -27,41 +32,34 @@ Matches our engine: 5×5, vision radius 2 (Chebyshev), 6 sub-games, thief moves
 first, 25 thief moves, scoring cop_win 20 / thief_win 10 / loss 5, capture = land
 on the other's cell, illegal/off-board/no-action = forfeit.
 
-**To confirm with them:**
-- **Barrier placement model.** We use the lecturer-confirmed deviation: the cop
-  drops a barrier on one of the 8 **adjacent empty cells** (not an arbitrary cell);
-  it is impassable for both; ≤5 per sub-game. Their spec only says "cop ≤5
-  barriers" — must confirm identical placement legality or validation will diverge.
-- **Start positions.** They derive both sides identically via
-  `random.Random(f"{seed}:{index}")` + uniform distinct pair with Chebyshev
-  distance > vision radius, **seed = 1234**. Our generator differs — for their
-  two-synced-referee model we must adopt their exact algorithm + seed.
+**Resolved as played:**
+- **Barrier placement model.** Both teams used the lecturer-confirmed deviation:
+  the cop drops a barrier on one of the 8 **adjacent empty cells** (not an
+  arbitrary cell); impassable for both; ≤5 per sub-game. Placement legality matched.
+- **Start positions.** The cop side is authoritative for each sub-game's start;
+  the thief side adopts those exact cells by reading the cop server's fresh reset
+  (see the sequencing rules below), so no shared RNG seed was required.
 
-## Protocol mismatch — MUST reconcile before play
-Their orchestration (their §4) and tool contract differ fundamentally from ours.
+## Protocol — resolved: we adopted their 8-tool Option 2 contract
+Our original proposal (`MATCH_PROTOCOL.md` §D, "Option 1") and the opponent's
+two-referee model differed, so to interoperate **we adopted their spec-literal
+Option 2** (`MATCH_PROTOCOL.md` §H): stateful role-bound referee servers exposing
+the agreed **8 tools** — `health_check, reset(cop,thief), get_observation,
+validate_action, submit_turn, get_match_status, receive_message, get_messages`.
+Implemented in `mcp_servers/match_server.py` + `orchestrator/match_driver.py`
+(`health_check` returns version `"1.00"`).
 
-| | **Them (group_1)** | **Us (group_2)** |
-|---|---|---|
-| Model | Two synced referees; both drivers run; every move submitted to both servers; lockstep on turn | Single referee per sub-game (cop team); referee pulls opponent's move via one tool |
-| Where state lives | In the role-bound **server** (server = referee) | In the **orchestrator** (server = relay) |
-| Start positions | Both derive identically from shared seed | Cop-side referee generates; other side need not reproduce |
-| Tools | `health_check, get_observation, validate_action, submit_turn, receive_message, get_match_status, reset(cop,thief), get_messages` | `health, observe, set_context, submit_turn, last_message, verify_location, play_turn` |
+| Two-referee model (as played) | |
+|---|---|
+| Referees | cop-side team's cop server is authoritative; thief-side team's thief server is the mirror |
+| Sync | both drivers run; every move is submitted to **both** servers; act when both report our turn |
+| Start | cop side resets its server each sub-game; thief side adopts those cells |
+| Tools | the 8-tool contract above |
 
-This is the **spec-literal Option 2** (our `MATCH_PROTOCOL.md` §H) vs our
-**Option 1** (§D). The two do not interoperate without one side conforming.
-
-**Open decision:** which contract do we play on? Leaning toward adopting theirs
-(it is fully specified and already implemented), which means: make our servers
-stateful referees exposing their 8 tools + `reset`, implement their start-position
-algorithm (seed 1234), and write a lockstep driver. Pending: their exact
-tool signatures (`get_observation` params, `submit_turn`/`validate_action`
-payloads, `reset` signature, `get_match_status` shape) and barrier confirmation.
-
-## Per-sub-game sequencing & reset handoff (REQUIRED — this is what stalled SG1→SG2)
+## Per-sub-game sequencing & reset handoff (as played)
 
 The match is 6 sub-games played **in order** over the same four servers. The
-single most important agreement, and the one that broke our first live run, is
-**who resets which server between sub-games**. Rules:
+key agreement is **who resets which server between sub-games**. Rules:
 
 1. **Each team resets only the server it OWNS.** Nobody resets the opponent's server.
 2. **The cop side is authoritative for the start cells** that sub-game. At the
@@ -88,13 +86,17 @@ Our driver implements exactly this in `orchestrator/match_driver.py`:
 they referee we `_adopt_start` (read their cop server's fresh reset) + `reset` our
 thief mirror; then a turn loop dual-submits via `_take_our_turn`.
 
-**What we observed live (2026-06-25):** SG1 played end-to-end and ended `cop_win`
+## Historical debugging note
+
+Kept for context only; the issues below were resolved and the full match completed.
+
+**During bring-up (2026-06-25):** SG1 played end-to-end and ended `cop_win`
 (their cop captured our thief) — authoritative (their cop) and mirror (our thief)
-agreed. Then it stalled: **their cop server stayed frozen at the SG1 `cop_win`
-result and was never reset for SG2**, so our thief driver waited forever for a
-clean `thief_moves: 0`. Their networked driver must **loop all 6 sub-games and
-re-`reset` its cop server at the top of each one** (step 2/5 above), not play a
-single sub-game and stop.
+agreed. Then it briefly stalled: their cop server stayed at the SG1 `cop_win`
+result and was not yet reset for SG2, so our thief driver waited for a clean
+`thief_moves: 0`. The fix was that each cop side **loops all 6 sub-games and
+re-`reset`s its cop server at the top of each one** (step 2/5 above) — after which
+the full series ran to completion.
 
 **Repo note (their public repo, checked 2026-06-25):** `cop-thief-match` there is
 the **loopback** `LocalMatch` (both teams in-process, local referees — not the
