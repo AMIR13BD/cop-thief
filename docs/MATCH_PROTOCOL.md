@@ -1,11 +1,16 @@
-# MATCH_PROTOCOL — inter-group online match wire contract (PROPOSAL v0.1)
+# MATCH_PROTOCOL — inter-group online match wire contract (design notes)
 
-> Status: **DRAFT to agree with the opponent team.** The assignment fixes the
-> *game* rules (`SHARED_MATCH_RULES.md`, §2.2 turn payload) but **not** the
-> cross-team MCP tool API (§5 describes the local two-server model only). This
-> document proposes that missing API so two teams' engines can play the §12
-> bonus series. Both teams must implement the **same** tools/shapes. Cite this
-> file by section in code and in the post-match report.
+> Status: **agreed & played.** This file is the design-space write-up for the §12
+> inter-group match. The assignment fixes the *game* rules
+> (`SHARED_MATCH_RULES.md`, §2.2 turn payload) but **not** the cross-team MCP tool
+> API, so this document worked through the options. **As played (2026-06-25) vs
+> team `ahk-yosi`, both teams used Option 2 — the spec-literal two-referee model
+> with the opponent's 8-tool contract** (`health_check, reset, get_observation,
+> validate_action, submit_turn, get_match_status, receive_message, get_messages`).
+> The as-played contract, handshake, and per-sub-game reset protocol are in
+> [`MATCH_PEER.md`](MATCH_PEER.md) and implemented in
+> `mcp_servers/match_server.py` + `orchestrator/match_driver.py`. The Option 1
+> proposal below is kept as the original design rationale.
 
 ---
 
@@ -130,9 +135,10 @@ fallback if the opponent team's server already exposes only these tools.
 
 ---
 
-### Open items to confirm with the opponent team
-- [ ] Which team is **Group 1** vs **Group 2** (sets the cop/thief halves).
-- [ ] **Option 1** (recommended) vs **Option 2** for the tool contract.
-- [ ] Two HTTPS URLs each + bearer tokens (out of band).
-- [ ] Protocol version string + a `health()` handshake before kickoff.
-- [ ] Out-of-band channel + format for exchanging the 3-sub-game result halves.
+### Resolved with the opponent team (as played, vs ahk-yosi)
+- [x] **Group 1 = ahk-yosi**, **Group 2 = amireman** (ahk-yosi cop in 1–3, amireman cop in 4–6).
+- [x] Tool contract: **Option 2** — the opponent's 8-tool two-referee model (see `MATCH_PEER.md`).
+- [x] Two HTTPS Cloud Run URLs each + per-server bearer tokens, exchanged out of band.
+- [x] `health_check` returns version `"1.00"`; handshake done before kickoff.
+- [x] Result halves reconciled into one byte-identical §9.2 JSON; both teams emailed
+      it with `mutual_agreement: true`. Final: **ahk-yosi 80 / amireman 60**.

@@ -35,22 +35,33 @@ Status: ✅ done · 🔜 next · ⬜ not started. Order follows assignment §13.
   per-turn natural-language messages. Run `cop-thief-gui`. *DoD: renders the series
   with play/step/restart controls — met.*
 
-## Phase 7 — Cloud deployment 🔜 (deferred — not part of the completed local section)
-- ⬜ Front each server with TLS (ngrok / Localtonet / Nginx); exchange HTTPS URLs
-  and tokens out of band — *DoD: peer reaches `health()` over HTTPS with a token.*
+## Phase 7 — Cloud deployment ✅
+- ✅ Both MCP servers deployed on **Google Cloud Run** over HTTPS with bearer-token
+  auth (`deploy/cloudrun.sh`, `mcp_servers/cloud_entry.py`) — *DoD met: the peer
+  team reached `health_check` over HTTPS with a token.*
 
-## Phase 8 — Reporting
+## Phase 8 — Reporting ✅
 - ✅ Internal & bonus report builders; JSON report **written to `results/reports/`**
-  (`orchestrator/report_builder.py`). This is what the local run produces.
-- 🔜 *Deferred:* Gmail send (body = JSON only) is scaffolded in
-  `orchestrator/gmail_sender.py` but not wired into the completed local section;
-  it needs the one-time OAuth Desktop client + `credentials.json` and `--email`.
+  (`orchestrator/report_builder.py`, `orchestrator/bonus_report.py`).
+- ✅ Gmail send (body = JSON only) wired (`orchestrator/gmail_sender.py`); used via
+  `cop-thief run --email` and **automatically at the end of `cop-thief match`**.
+  Needs the one-time OAuth Desktop client + `credentials.json`/`token.json` (git-ignored).
 
 ## Cross-cutting ✅
 - ✅ Config-driven, no hard-coding; `.env.example`; secrets git-ignored.
 - ✅ Ruff-clean; ≤150 lines/file; ≥85 % coverage; `uv.lock`.
 - ✅ README with Dec-POMDP, architecture, run/test/security docs.
 
-## Per-match (fill before the graded run)
-- ⬜ Team names, students, GitHub repo, MCP URLs, shared seed, tokens.
-- ⬜ Agree the final JSON with the peer team; both email with `mutual_agreement:true`.
+## Phase 9 — Inter-group bonus match ✅ (vs ahk-yosi)
+- ✅ Stateful two-referee match server (opponent's 8-tool contract) + lockstep driver
+  (`mcp_servers/match_server.py`, `orchestrator/match_driver.py`); contract + handshake
+  in `docs/MATCH_PEER.md`.
+- ✅ Team identity filled in `config/config.yaml` (group_name, students, repo, cloud
+  MCP URLs, seed); per-server tokens in `.env` (git-ignored).
+- ✅ Played the live 6-sub-game match vs **ahk-yosi**, agreed the byte-identical §9.2
+  `bonus_game` JSON (`mutual_agreement: true`), and both teams emailed it. Final:
+  **ahk-yosi 80 / amireman 60** (series winner ahk-yosi; bonus claim 10/7). Evidence:
+  `assets/bonus_report.json`.
+
+## Optional / not required
+- ⬜ Tabular Q-learning baseline (assignment §8) — explicitly optional, not implemented.

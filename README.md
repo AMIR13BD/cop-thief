@@ -20,11 +20,15 @@ intervention** from start to final report.
 
 ---
 
-> **Scope.** This repository delivers the **local section**: the full game,
-> partial observability, barriers, the two local MCP servers, the orchestrator
-> that drives the series through them, and the JSON report written under
-> `results/reports/`. **Gmail delivery and cloud (HTTPS-tunnel) deployment are
-> scaffolded but deferred — they are not part of the completed local section.**
+> **Scope — all stages complete.**
+> - **Local / offline section:** ✅ the full game, partial observability, barriers,
+>   the two local MCP servers, the orchestrator that drives the series, and the
+>   JSON report written under `results/reports/`.
+> - **Cloud / online MCP deployment:** ✅ both servers deployed on Google Cloud Run
+>   (HTTPS + bearer-token auth).
+> - **Bonus inter-group match:** ✅ played live against team **ahk-yosi** over the
+>   four cloud MCP servers (see [§14](#14-bonus-round--inter-group-match)).
+> - **Gmail report delivery:** ✅ wired and used (the §9.2 report is auto-emailed).
 
 > The graded value of this project is the **orchestration and communication**
 > infrastructure, not the cleverness of the chase strategy (assignment §3, §14).
@@ -65,8 +69,8 @@ reason from the opponent's **natural-language messages**, which may be bluffs.
 A central **orchestrator (the MCP client)** holds the LLM, drives the
 conversation, and asks the authoritative **referee** to validate every action.
 After 6 clean sub-games it builds a JSON report and writes it to
-`results/reports/`. (Emailing that report via the Gmail API is scaffolded in
-`orchestrator/gmail_sender.py` but **deferred** — see §13.)
+`results/reports/`, and can email it via the Gmail API (`--email`, or
+automatically at the end of the bonus match — see §13).
 
 The whole pipeline **runs offline and deterministically** out of the box: with
 no API key it uses a built-in heuristic policy, so the game, logging, and report
@@ -359,9 +363,11 @@ uv run python -m cop_thief.mcp_servers.thief_server   # binds 127.0.0.1:8102
 
 Bind host/port come from `config.yaml` → `mcp.{cop,thief}` (overridable by
 `COP_SERVER_HOST/PORT` and `THIEF_SERVER_HOST/PORT`). Set `MCP_AUTH_TOKEN` to
-require a bearer token on every tool except `health()`. For the cloud stage,
-front each server with TLS (ngrok Traffic Policy / Localtonet / Nginx) so the
-four MCP URLs are **HTTPS**, and exchange tokens out of band.
+require a bearer token on every tool except `health()`. **For the bonus match our
+two servers are deployed on Google Cloud Run** (HTTPS + bearer-token auth); the
+match server exposes the agreed 8-tool contract (see [§14](#14-bonus-round--inter-group-match)).
+You can alternatively front a local server with a TLS tunnel (ngrok / Localtonet /
+Nginx) to get an HTTPS URL; tokens are exchanged out of band either way.
 
 ## 12. How to run the full 6-game series
 
@@ -429,7 +435,10 @@ to `results/reports/` and emails it (body = compact JSON only). Both teams email
 the **byte-identical** report to the grader with `mutual_agreement: true` (§12.2).
 
 **Result.** ahk-yosi **80**, amireman **60** — series winner **ahk-yosi**; bonus
-claim ahk-yosi 10 / amireman 7.
+claim ahk-yosi 10 / amireman 7. The final agreed §9.2 `bonus_game` report that both
+teams emailed (`mutual_agreement: true`, no secrets) is committed for evidence at
+[`assets/bonus_report.json`](assets/bonus_report.json); live runs also write a copy
+under `results/reports/`.
 
 **🎥 Watch the full match: [amireman vs ahk-yosi — full 6-sub-game inter-group game](https://www.youtube.com/watch?v=FdXurY4s4dY). A complete recording of the live match: both teams' drivers running against the four Cloud Run MCP servers, the natural-language messages exchanged each turn, and all six sub-games playing out to the final §9.2 result.**
 
