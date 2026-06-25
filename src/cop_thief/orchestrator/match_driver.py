@@ -59,9 +59,10 @@ class MatchDriver:
         self.cop_agent = build_cop_agent(self.params, llm)
         self.thief_agent = build_thief_agent(self.params, llm)
         our_token = resolve_expected_token()
+        team = config.team  # our canonical deployed (cloud) URLs live here, not in mcp_url()
         self._endpoints = {
-            "our_cop": (config.mcp_url("cop"), our_token),
-            "our_thief": (config.mcp_url("thief"), our_token),
+            "our_cop": (team["cop_mcp_url"], our_token),
+            "our_thief": (team["thief_mcp_url"], our_token),
             "their_cop": (peer_cop_url, peer_cop_token),
             "their_thief": (peer_thief_url, peer_thief_token),
         }
@@ -131,13 +132,19 @@ class MatchDriver:
         lay = self._layout(index)
         cop_cli, thief_cli = clients[lay["cop_server"]], clients[lay["thief_server"]]
         refs = [cop_cli, thief_cli]
-        cop_start, thief_start = START_POSITIONS[index]
-
-        if lay["we_are_cop"]:  # we referee: reset both servers to the agreed start
-            for ref in refs:
-                await self._call(ref, "reset", {"cop": cop_start, "thief": thief_start})
-        else:  # they referee: wait until both servers show the start (boundary detection)
-            await self._await_start(refs, cop_start, thief_start)
+        own_cli, opp_cli = clients[lay["our_view"]], clients[lay["opp_view"]]
+        if lay["we_are_cop"]:
+            # We referee (4-6): we choose the start, reset our cop server, and wait for
+            # their thief mirror to show the same cells (they read & mirror our reset).
+            cop_start, thief_start = START_POSITIONS[index]
+            await self._call(own_cli, "reset", {"cop": cop_start, "thief": thief_start})
+            await self._await_start([opp_cli], cop_start, thief_start)
+        else:
+            # They referee (1-3): adopt THEIR start. Their cells come from their own
+            # seed (docs/MATCH_PEER.md), so we don't hardcode — we wait for their fresh
+            # reset (thief_moves==0) and mirror those exact cells into our thief server.
+            cop_start, thief_start = await self._adopt_start(opp_cli)
+            await self._call(own_cli, "reset", {"cop": cop_start, "thief": thief_start})
 
         our_barriers_used = 0
         while True:
@@ -157,6 +164,19 @@ class MatchDriver:
         if not lay["we_are_cop"]:
             return None  # their authoritative half — they record it
         return self._summarise(index, result_status, cop_start, thief_start, statuses[0])
+
+    async def _adopt_start(self, opp_cli) -> tuple[list[int], list[int]]:
+        """Wait for the opponent's fresh reset (thief_moves==0) and return its start cells."""
+        waited = 0.0
+        while True:
+            s = await self._call(opp_cli, "get_match_status", {})
+            if (s.get("status") == "ongoing" and s.get("thief_moves") == 0
+                    and s.get("cop") and s.get("thief")):
+                return list(s["cop"]), list(s["thief"])
+            await asyncio.sleep(self.poll_interval)
+            waited += self.poll_interval
+            if waited > self.turn_timeout * 4:
+                raise TechnicalLoss("opponent's fresh reset (thief_moves==0) did not appear")
 
     async def _await_start(self, refs, cop_start, thief_start) -> None:
         """Block until both referees show the agreed start with thief_moves == 0."""
